@@ -1,4 +1,34 @@
- **HƯỚNG DẪN TẠO MỘT ENDPOINT MỚI TRONG EXPRESS + PRISMA (CLEAN ARCHITECTURE)**
+ 
+**Hướng dẫn tạo database**
+
+chạy lệnh:
+
+```bash
+npx prisma migrate dev --name init
+```
+(Hoặc có thể chạy file /db_migration/db_table thủ công :vv)
+
+Sau đó import thủ công dữ liệu từ ./db_migration/db_data
+
+
+**Tạo 1 model mới**
+ví dụ tạo model vehicle: thêm vào file prisma/schema.prisma:
+```prisma
+model vehicles {
+  id    String  @id @default(uuid())
+  name  String
+  type  String
+  speed Int?
+}
+```
+Chạy migration:
+```bash
+npx prisma migrate dev --name add_vehicles_table
+```
+Tiếp theo tạo các endpoint theo hướng dẫn.
+
+
+**HƯỚNG DẪN TẠO MỘT ENDPOINT MỚI TRONG EXPRESS + PRISMA (CLEAN ARCHITECTURE)**
 
 *Version: 1.0 – Sử dụng Prisma, Services, Controllers, Routes*
 
