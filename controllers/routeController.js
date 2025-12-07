@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const { planRouteWithGeometry, stops, getStopById } = require('../utils/graph');
 const { findNearestStop, haversineDistance } = require('../utils/geo');
 const { saveRoute, getRoute } = require('../utils/routeStore');
+const { prisma } = require('../config/prisma');
 
 function buildSegmentSteps(segments) {
   return segments.map((segment, index) => {
@@ -11,13 +12,13 @@ function buildSegmentSteps(segments) {
       segment.mode === 'walk'
         ? 'Đi bộ'
         : segment.mode === 'train'
-        ? 'Đi tàu'
-        : 'Đi xe buýt';
+          ? 'Đi tàu'
+          : 'Đi xe buýt';
 
     // Determine if this is a transfer point
     const isTransfer = index > 0 &&
-                      segment.mode !== 'walk' &&
-                      segments[index - 1].mode !== 'walk';
+      segment.mode !== 'walk' &&
+      segments[index - 1].mode !== 'walk';
 
     // Generate wait time for transit segments
     const waitTime = segment.mode !== 'walk' ? randomWaitTime() : 0;
@@ -80,8 +81,8 @@ function buildRoutePayload({ filter, planResult, fromStop, toStop, fromCoords, t
       filter === 'fastest'
         ? 'Nhanh nhất'
         : filter === 'fewest_transfers'
-        ? 'Ít chuyển tuyến'
-        : 'Rẻ nhất',
+          ? 'Ít chuyển tuyến'
+          : 'Rẻ nhất',
     from: fromStop,
     to: toStop,
     fromCoords,

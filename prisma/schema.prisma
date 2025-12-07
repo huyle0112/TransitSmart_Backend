@@ -1,0 +1,67 @@
+// This is your Prisma schema file
+
+generator client {
+  provider = "prisma-client"
+  output   = "../node_modules/@prisma/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  createdAt DateTime @default(now())
+}
+
+enum TransportType{
+  bus
+  train
+}
+model stops{
+  id String @id @db.varChar(50)
+  name String
+  lat Float
+  lng Float
+  type TransportType
+
+  stop_times stop_times[]
+}
+
+model routes{
+  id String @id @db.varChar(50)
+  short_name String
+  long_name String
+  type TransportType
+  fare Int
+  forward_direction Boolean
+
+  trips trip[]
+}
+
+model trips{
+  trip_id String @id @db.varChar(50)
+  route_id String @db.varChar(50)
+
+  routes routes @relation(fields: [route_id], references: [id], onDelete: Cascade)
+  stop_times stop_times[]
+}
+
+model stop_times{
+  trip_id String @db.varChar(50)
+  stop_id String @db.varChar(50)
+  arrival_time DateTime? @db.Time
+  departure_time DateTime? @db.Time
+  stop_sequence Int
+
+  @id [trip_id, stop_id]
+
+  trip trips @relation(fields: [trip_id], references: [trip_id], onDelete: Cascade)
+  stop stops @relation(fields: [stop_id], references: [id], onDelete: Cascade)
+}
+
+
+

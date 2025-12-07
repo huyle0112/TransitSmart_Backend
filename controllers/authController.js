@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const { v4: uuidv4 } = require('uuid');
 const { addUser, getUserByEmail } = require('../data/store');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-mock-key';
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = '12h';
 
 function signToken(user) {

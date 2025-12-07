@@ -7,20 +7,22 @@ const routeRoutes = require('./routes/routeRoutes');
 const searchRoutes = require('./routes/searchRoutes');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const dbRoutes = require('./routes/dbRoutes');
+const stopRoutes = require('./routes/stops.routes')
 const { getNearbyStops } = require('./controllers/routeController');
 
 const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Initialize GTFS data on startup
-console.log('🚀 Initializing GTFS data...');
+console.log(' Initializing GTFS data...');
 const { loadStops, loadRoutes } = require('./utils/gtfsLoader');
 const stops = loadStops();
 const routes = loadRoutes();
-console.log(`✅ Loaded ${stops.length} stops and ${routes.length} routes`);
+console.log(` Loaded ${stops.length} stops and ${routes.length} routes`);
 // Initialize graph to build edges
 const { stops: graphStops } = require('./utils/graph');
-console.log(`✅ Graph initialized with ${graphStops.length} stops`);
+console.log(`Graph initialized with ${graphStops.length} stops`);
 
 app.use(cors());
 app.use(express.json());
@@ -35,6 +37,8 @@ app.get('/api/nearby', getNearbyStops);
 app.use('/api/search', searchRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/db', dbRoutes);
+app.use('/api/stop', stopRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Endpoint không tồn tại' });

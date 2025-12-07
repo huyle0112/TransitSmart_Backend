@@ -1,0 +1,97 @@
+-- ========================================
+-- 1. Stops
+-- ========================================
+DROP TABLE IF EXISTS stops;
+
+CREATE TABLE stops (
+    id VARCHAR(50) PRIMARY KEY,
+    name TEXT NOT NULL,
+    lat DOUBLE PRECISION NOT NULL,
+    lng DOUBLE PRECISION NOT NULL,
+    type VARCHAR(10) CHECK (type in ('bus', 'train')) 
+);
+
+-- ========================================
+-- 2. Routes
+-- ========================================
+DROP TABLE IF EXISTS routes;
+
+CREATE TABLE routes (
+    id VARCHAR(50) PRIMARY KEY,
+    short_name TEXT,
+    long_name TEXT,
+    type VARCHAR(10) CHECK (type in ('bus', 'train')),
+    fare INT,
+    forward_direction BOOLEAN
+);
+-- ========================================
+-- 3. Trips
+-- ========================================
+DROP TABLE IF EXISTS trips;
+
+CREATE TABLE trips (
+    trip_id VARCHAR(50) PRIMARY KEY,
+    route_id VARCHAR(50) REFERENCES routes(id) ON DELETE CASCADE
+);
+
+-- ========================================
+-- 4. StopTimes
+-- ========================================
+DROP TABLE IF EXISTS stop_times;
+
+CREATE TABLE stop_times (
+    trip_id VARCHAR(50) REFERENCES trips(trip_id) ON DELETE CASCADE,
+    stop_id VARCHAR(50) REFERENCES stops(id) ON DELETE CASCADE,
+    arrival_time TIME,
+    departure_time TIME,
+    stop_sequence INT,
+    PRIMARY KEY (trip_id, stop_sequence)
+);
+-- ========================================
+-- 7. Users
+-- ========================================
+DROP TABLE IF EXISTS saved_routes;
+DROP TABLE IF EXISTS users;
+
+CREATE TABLE users (
+    id UUID PRIMARY KEY,
+    name TEXT,
+    email TEXT UNIQUE NOT NULL,
+    password TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT NOW(),
+    path_url TEXT
+);
+
+-- ========================================
+-- 8. Saved Routes / Favorites
+-- ========================================
+CREATE TABLE saved_routes (
+    id UUID PRIMARY KEY,
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    title TEXT,
+    from_stop VARCHAR(50),
+    to_stop VARCHAR(50),
+    mode VARCHAR(50) CHECK (mode in ('fastest', 'cheapest', 'fewest_tranfers')),
+    options VARCHAR(50),
+    saved_at TIMESTAMP DEFAULT NOW()
+);
+
+-- ========================================
+-- Reviews (Vote + Comment cho Stop và Route)
+-- ========================================
+
+DROP TABLE IF EXISTS reviews;
+
+CREATE TABLE reviews (
+    id UUID PRIMARY KEY,                   
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    target_type VARCHAR(20) NOT NULL CHECK (target_type IN ('stop', 'route')),                                       
+    target_id VARCHAR(50) NOT NULL,       
+    rating INT CHECK (rating BETWEEN 1 AND 5),                                         
+    comment TEXT,                          
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Index giúp tìm nhanh review theo stop/route
+CREATE INDEX idx_reviews_target ON reviews (target_type, target_id);

@@ -111,3 +111,5 @@ dist
 
 # Windows
 Thumbs.db
+
+/generated/prisma
