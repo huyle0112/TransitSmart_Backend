@@ -1,10 +1,8 @@
 const { PrismaClient } = require('@prisma/client');
+require('dotenv').config(); // Load DATABASE_URL
 
-// Khởi tạo Prisma Client
-// Đảm bảo DATABASE_URL đã được cấu hình trong .env
 const prisma = new PrismaClient({
-    datasourceUrl: process.env.DATABASE_URL,
-    log: ['query', 'info', 'warn', 'error'],
+    log: ['query', 'info', 'warn', 'error'], // optional
 });
 
 module.exports = prisma;

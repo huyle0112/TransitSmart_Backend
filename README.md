@@ -6,6 +6,11 @@ CƠ SƠ DỮ LIỆU SỬ DỤNG: POSTGRESQL
 chạy lệnh:
 
 ```bash
+npm run dev
+npx prisma generate
+```
+
+```bash
 npx prisma migrate dev --name init
 ```
 (Hoặc có thể chạy file /db_migration/db_table thủ công :vv)

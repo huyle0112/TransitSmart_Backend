@@ -15,14 +15,14 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 
 // Initialize GTFS data on startup
-console.log(' Initializing GTFS data...');
-const { loadStops, loadRoutes } = require('./utils/gtfsLoader');
-const stops = loadStops();
-const routes = loadRoutes();
-console.log(` Loaded ${stops.length} stops and ${routes.length} routes`);
+// console.log(' Initializing GTFS data...');
+// const { loadStops, loadRoutes } = require('./utils/gtfsLoader');
+// const stops = loadStops();
+// const routes = loadRoutes();
+// console.log(` Loaded ${stops.length} stops and ${routes.length} routes`);
 // Initialize graph to build edges
-const { stops: graphStops } = require('./utils/graph');
-console.log(`Graph initialized with ${graphStops.length} stops`);
+// const { stops: graphStops } = require('./utils/graph');
+// console.log(`Graph initialized with ${graphStops.length} stops`);
 
 app.use(cors());
 app.use(express.json());
