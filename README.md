@@ -1,6 +1,8 @@
  
 **Hướng dẫn tạo database**
 
+CƠ SƠ DỮ LIỆU SỬ DỤNG: POSTGRESQL
+
 chạy lệnh:
 
 ```bash
@@ -23,7 +25,7 @@ model vehicles {
 ```
 Chạy migration:
 ```bash
-npx prisma migrate dev --name add_vehicles_table
+npx prisma migrate dev --name create_vehicles_table
 ```
 Tiếp theo tạo các endpoint theo hướng dẫn.
 
