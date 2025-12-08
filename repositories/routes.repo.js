@@ -12,11 +12,6 @@ module.exports = {
             include: { trips: true }
         }),
 
-    create: (data) =>
-        prisma.routes.create({
-            data
-        }),
-
     getByType: (type) =>
         prisma.routes.findMany({
             where: { type }
