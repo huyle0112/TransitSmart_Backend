@@ -1,209 +1,185 @@
-const fs = require('fs');
-const path = require('path');
-const parse = require('csv-parse/sync').parse;
+const prisma = require('../config/prisma');
 
-// Path to GTFS files
-const GTFS_DIR = path.join(__dirname, '../data/gtfs');
-
-// Cache for loaded GTFS data
+// Cache for loaded data
 let cachedStops = null;
 let cachedRoutes = null;
 let cachedTrips = null;
 let cachedStopTimes = null;
 
 /**
- * Load and parse a GTFS CSV file
- */
-function loadGtfsFile(filename) {
-  const filePath = path.join(GTFS_DIR, filename);
-  if (!fs.existsSync(filePath)) {
-    console.warn(`GTFS file not found: ${filename}`);
-    return [];
-  }
-
-  const content = fs.readFileSync(filePath, 'utf8');
-  return parse(content, {
-    columns: true,
-    skip_empty_lines: true,
-    trim: true
-  });
-}
-
-/**
- * Load stops from GTFS stops.txt (or stops-enriched.txt if available)
+ * Load stops from database using Prisma
  * Converts to app format: { id, name, coords: {lat, lng}, type }
  */
-function loadStops() {
+async function loadStops() {
   if (cachedStops) return cachedStops;
 
-  // Try to load enriched version first (with human-readable names)
-  const enrichedPath = path.join(GTFS_DIR, 'stops-enriched.txt');
-  const filename = fs.existsSync(enrichedPath) ? 'stops-enriched.txt' : 'stops.txt';
+  try {
+    const dbStops = await prisma.stops.findMany();
 
-  if (filename === 'stops-enriched.txt') {
-    console.log('📍 Using enriched stop names');
+    cachedStops = dbStops.map(stop => ({
+      id: stop.id,
+      name: stop.name,
+      coords: {
+        lat: parseFloat(stop.lat),
+        lng: parseFloat(stop.lng)
+      },
+      type: stop.type || 'bus'
+    }));
+
+    console.log(`✅ Loaded ${cachedStops.length} stops from DATABASE`);
+    return cachedStops;
+  } catch (error) {
+    console.error('❌ Error loading stops from database:', error.message);
+    return [];
   }
-
-  const gtfsStops = loadGtfsFile(filename);
-
-  cachedStops = gtfsStops.map(stop => ({
-    id: stop.stop_id,
-    name: stop.stop_name,
-    coords: {
-      lat: parseFloat(stop.stop_lat),
-      lng: parseFloat(stop.stop_lon)
-    },
-    type: 'bus', // GTFS doesn't have type, default to bus
-    // Keep original GTFS fields for reference
-    gtfs: {
-      stop_code: stop.stop_code,
-      stop_desc: stop.stop_desc,
-      zone_id: stop.zone_id,
-      stop_url: stop.stop_url
-    }
-  }));
-
-  console.log(`✅ Loaded ${cachedStops.length} stops from GTFS`);
-  return cachedStops;
 }
 
 /**
- * Load routes from GTFS routes.txt
+ * Load routes from database using Prisma
  * Converts to app format: { id, name, type, color, stops[], serviceHours, frequencyMinutes, fare }
  */
-function loadRoutes() {
+async function loadRoutes() {
   if (cachedRoutes) return cachedRoutes;
 
-  const gtfsRoutes = loadGtfsFile('routes.txt');
-  const gtfsTrips = loadTrips();
-  const gtfsStopTimes = loadStopTimes();
-
-  // Build stop sequences for each route
-  const routeStopsMap = new Map();
-
-  gtfsTrips.forEach(trip => {
-    const routeId = trip.route_id;
-    if (!routeStopsMap.has(routeId)) {
-      routeStopsMap.set(routeId, new Set());
-    }
-
-    // Get all stops for this trip
-    const tripStops = gtfsStopTimes
-      .filter(st => st.trip_id === trip.trip_id)
-      .sort((a, b) => parseInt(a.stop_sequence) - parseInt(b.stop_sequence))
-      .map(st => st.stop_id);
-
-    // Add to route's stop set (preserving order of first trip)
-    if (routeStopsMap.get(routeId).size === 0) {
-      tripStops.forEach(stopId => routeStopsMap.get(routeId).add(stopId));
-    }
-  });
-
-  cachedRoutes = gtfsRoutes.map(route => {
-    const stops = Array.from(routeStopsMap.get(route.route_id) || []);
-
-    // Determine type from route_type (GTFS standard)
-    // 0,1,2 = tram/metro/rail, 3 = bus, 4 = ferry
-    let type = 'bus';
-    const routeType = parseInt(route.route_type);
-    if ([0, 1, 2, 400, 401, 402].includes(routeType)) {
-      type = 'train';
-    } else if (routeType === 4) {
-      type = 'ferry';
-    }
-
-    return {
-      id: route.route_id,
-      name: route.route_long_name || route.route_short_name,
-      type: type,
-      color: route.route_color ? `#${route.route_color}` : '#1f8eed',
-      stops: stops,
-      serviceHours: '05:00 - 23:00', // Default, could be computed from stop_times
-      frequencyMinutes: 15, // Default, could be computed from trips
-      fare: 7000, // Default fare for Hanoi buses
-      // Keep original GTFS fields
-      gtfs: {
-        route_short_name: route.route_short_name,
-        route_long_name: route.route_long_name,
-        route_desc: route.route_desc,
-        route_type: route.route_type,
-        route_url: route.route_url,
-        route_text_color: route.route_text_color
+  try {
+    const dbRoutes = await prisma.routes.findMany({
+      include: {
+        trips: {
+          include: {
+            stop_times: {
+              orderBy: {
+                stop_sequence: 'asc'
+              }
+            }
+          }
+        }
       }
-    };
-  });
+    });
 
-  console.log(`✅ Loaded ${cachedRoutes.length} routes from GTFS`);
-  return cachedRoutes;
+    // Build routes with stop sequences
+    cachedRoutes = dbRoutes.map(route => {
+      // Get unique stops from all trips of this route
+      const stopIds = new Set();
+
+      // Use the first trip to get the stop sequence
+      if (route.trips.length > 0) {
+        const firstTrip = route.trips[0];
+        firstTrip.stop_times.forEach(st => {
+          if (st.stop_id) {
+            stopIds.add(st.stop_id);
+          }
+        });
+      }
+
+      return {
+        id: route.id,
+        name: route.long_name || route.short_name || route.id,
+        shortName: route.short_name,
+        type: route.type || 'bus',
+        color: '#1f8eed', // Default color, can be extended in schema
+        stops: Array.from(stopIds),
+        stopIds: Array.from(stopIds), // For compatibility
+        serviceHours: '05:00 - 23:00',
+        frequencyMinutes: 15,
+        fare: route.fare || 7000
+      };
+    });
+
+    console.log(`✅ Loaded ${cachedRoutes.length} routes from DATABASE`);
+    return cachedRoutes;
+  } catch (error) {
+    console.error('❌ Error loading routes from database:', error.message);
+    return [];
+  }
 }
 
 /**
- * Load trips from GTFS trips.txt
+ * Load trips from database using Prisma
  */
-function loadTrips() {
+async function loadTrips() {
   if (cachedTrips) return cachedTrips;
 
-  cachedTrips = loadGtfsFile('trips.txt');
-  return cachedTrips;
+  try {
+    const dbTrips = await prisma.trips.findMany();
+    cachedTrips = dbTrips;
+    console.log(`✅ Loaded ${cachedTrips.length} trips from DATABASE`);
+    return cachedTrips;
+  } catch (error) {
+    console.error('❌ Error loading trips from database:', error.message);
+    return [];
+  }
 }
 
 /**
- * Load stop times from GTFS stop_times.txt
+ * Load stop times from database using Prisma
  */
-function loadStopTimes() {
+async function loadStopTimes() {
   if (cachedStopTimes) return cachedStopTimes;
 
-  cachedStopTimes = loadGtfsFile('stop_times.txt');
-  return cachedStopTimes;
+  try {
+    const dbStopTimes = await prisma.stop_times.findMany({
+      orderBy: [
+        { trip_id: 'asc' },
+        { stop_sequence: 'asc' }
+      ]
+    });
+    cachedStopTimes = dbStopTimes;
+    console.log(`✅ Loaded ${cachedStopTimes.length} stop_times from DATABASE`);
+    return cachedStopTimes;
+  } catch (error) {
+    console.error('❌ Error loading stop_times from database:', error.message);
+    return [];
+  }
 }
 
 /**
- * Build graph edges from GTFS data
+ * Build graph edges from database data
  * Returns array of edges: { from, to, lineId, mode, duration, cost, distance }
  */
-function buildGraphFromGtfs() {
-  const routes = loadRoutes();
-  const stops = loadStops();
+async function buildGraphFromGtfs() {
+  const routes = await loadRoutes();
+  const stops = await loadStops();
   const stopMap = new Map(stops.map(s => [s.id, s]));
   const { haversineDistance } = require('./geo');
 
   const edges = [];
-  const WALK_THRESHOLD_KM = 0.1; // Max walking distance between stops (100m - minimize transfers)
+  const WALK_THRESHOLD_KM = 0.1; // Max walking distance between stops (100m)
 
-  // 1. Build edges along each route (BIDIRECTIONAL - for both directions)
+  // 1. Build edges along each route (BIDIRECTIONAL)
   routes.forEach(route => {
-    for (let i = 0; i < route.stops.length - 1; i++) {
-      const fromId = route.stops[i];
-      const toId = route.stops[i + 1];
+    const routeStops = route.stops;
+
+    for (let i = 0; i < routeStops.length - 1; i++) {
+      const fromId = routeStops[i];
+      const toId = routeStops[i + 1];
       const fromStop = stopMap.get(fromId);
       const toStop = stopMap.get(toId);
 
       if (!fromStop || !toStop) continue;
 
       const distance = haversineDistance(fromStop.coords, toStop.coords);
-      // Estimate duration: buses avg 20 km/h in city, trains 40 km/h
-      const speed = route.type === 'train' ? 40 : 20;
+      const speed = route.type === 'train' ? 40 : 20; // km/h
       const duration = Math.ceil((distance / speed) * 60); // minutes
-      // Cost is 0 for individual edges - fare is paid once per route, not per segment
-      // The actual fare (7000 VND) is applied when building segments
-      const cost = 0;
+      const cost = 0; // Cost is per route, not per segment
 
-      // Add edge in forward direction
+      // Forward direction
       edges.push({
         from: fromId,
         to: toId,
         lineId: route.id,
+        lineName: route.name,
         mode: route.type,
         duration: duration,
         cost: cost,
         distance: distance
       });
 
-      // Add edge in reverse direction (important for bi-directional routing!)
+      // Reverse direction
       edges.push({
         from: toId,
         to: fromId,
         lineId: route.id,
+        lineName: route.name,
         mode: route.type,
         duration: duration,
         cost: cost,
@@ -212,7 +188,7 @@ function buildGraphFromGtfs() {
     }
   });
 
-  // 2. Build walking edges between nearby stops (for transfers) - BIDIRECTIONAL
+  // 2. Build walking edges between nearby stops (BIDIRECTIONAL)
   const stopArray = Array.from(stopMap.values());
   for (let i = 0; i < stopArray.length; i++) {
     for (let j = i + 1; j < stopArray.length; j++) {
@@ -221,14 +197,13 @@ function buildGraphFromGtfs() {
       const distance = haversineDistance(stop1.coords, stop2.coords);
 
       if (distance <= WALK_THRESHOLD_KM) {
-        // Walking speed: 5 km/h
-        const duration = Math.ceil((distance / 5) * 60);
+        const duration = Math.ceil((distance / 5) * 60); // 5 km/h walking speed
 
-        // Add walking edge in both directions
         edges.push({
           from: stop1.id,
           to: stop2.id,
           lineId: null,
+          lineName: null,
           mode: 'walk',
           duration: duration,
           cost: 0,
@@ -239,6 +214,7 @@ function buildGraphFromGtfs() {
           from: stop2.id,
           to: stop1.id,
           lineId: null,
+          lineName: null,
           mode: 'walk',
           duration: duration,
           cost: 0,
@@ -248,12 +224,12 @@ function buildGraphFromGtfs() {
     }
   }
 
-  console.log(`✅ Built ${edges.length} edges from GTFS data`);
+  console.log(`✅ Built ${edges.length} edges from DATABASE data`);
   return edges;
 }
 
 /**
- * Reload all GTFS data (clear cache)
+ * Reload all data (clear cache)
  */
 function reloadGtfs() {
   cachedStops = null;
@@ -261,9 +237,17 @@ function reloadGtfs() {
   cachedTrips = null;
   cachedStopTimes = null;
 
-  console.log('🔄 Reloading GTFS data...');
-  loadStops();
-  loadRoutes();
+  console.log('🔄 Clearing cache, will reload from DATABASE on next request');
+}
+
+/**
+ * Initialize data on startup
+ */
+async function initializeData() {
+  console.log('🚀 Initializing data from DATABASE...');
+  await loadStops();
+  await loadRoutes();
+  console.log('✅ Data initialization complete');
 }
 
 module.exports = {
@@ -272,6 +256,7 @@ module.exports = {
   loadTrips,
   loadStopTimes,
   buildGraphFromGtfs,
-  reloadGtfs
+  reloadGtfs,
+  initializeData
 };
 

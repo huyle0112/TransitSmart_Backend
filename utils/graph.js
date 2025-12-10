@@ -1,20 +1,41 @@
 const { loadStops, loadRoutes, buildGraphFromGtfs } = require('./gtfsLoader');
 const { haversineDistance } = require('./geo');
 
-// Load data from GTFS
-const stops = loadStops();
-const lines = loadRoutes();
-const rawEdges = buildGraphFromGtfs();
+// Global cache for graph data
+let stops = null;
+let lines = null;
+let rawEdges = null;
+let adjacency = null;
+let lineMap = null;
+let stopMap = null;
 
-const lineMap = new Map(lines.map((line) => [line.id, line]));
-const stopMap = new Map(stops.map((stop) => [stop.id, stop]));
+/**
+ * Initialize graph data from database
+ */
+async function initializeGraph() {
+  if (stops && lines && rawEdges) {
+    return; // Already initialized
+  }
+
+  console.log('🔄 Initializing graph from DATABASE...');
+
+  stops = await loadStops();
+  lines = await loadRoutes();
+  rawEdges = await buildGraphFromGtfs();
+
+  lineMap = new Map(lines.map((line) => [line.id, line]));
+  stopMap = new Map(stops.map((stop) => [stop.id, stop]));
+  adjacency = buildAdjacency();
+
+  console.log('✅ Graph initialized successfully');
+}
 
 function buildAdjacency() {
-  const adjacency = new Map();
+  const adj = new Map();
 
   const register = (edge) => {
-    if (!adjacency.has(edge.from)) adjacency.set(edge.from, []);
-    adjacency.get(edge.from).push(edge);
+    if (!adj.has(edge.from)) adj.set(edge.from, []);
+    adj.get(edge.from).push(edge);
   };
 
   rawEdges.forEach((edge) => {
@@ -26,10 +47,8 @@ function buildAdjacency() {
     });
   });
 
-  return adjacency;
+  return adj;
 }
-
-const adjacency = buildAdjacency();
 
 function scoreEdge(edge, filter, previousLineId) {
   if (filter === 'cheapest') {
@@ -84,7 +103,9 @@ function reconstructPath(targetKey, previousMap) {
   return path;
 }
 
-function dijkstra(startId, endId, filter) {
+async function dijkstra(startId, endId, filter) {
+  await initializeGraph(); // Ensure graph is loaded
+
   const startKey = `${startId}|__`;
   const distances = new Map([[startKey, 0]]);
   const previous = new Map();
@@ -101,199 +122,140 @@ function dijkstra(startId, endId, filter) {
     visited.add(current.key);
 
     if (current.stopId === endId) {
-      return reconstructPath(current.key, previous);
+      const path = reconstructPath(current.key, previous);
+      return path;
     }
 
     const neighbors = adjacency.get(current.stopId) || [];
-    neighbors.forEach((edge) => {
-      const nextLine =
-        edge.mode === 'walk' ? 'walk' : edge.lineId || null;
-      const nextKey = `${edge.to}|${nextLine || '__'}`;
-      const weight = scoreEdge(edge, filter, current.lineId);
-      const tentative = (distances.get(current.key) || 0) + weight;
 
-      if (tentative < (distances.get(nextKey) || Number.POSITIVE_INFINITY)) {
-        distances.set(nextKey, tentative);
-        previous.set(nextKey, {
-          prevKey: current.key,
-          edge: { ...edge, from: current.stopId },
-        });
+    for (const edge of neighbors) {
+      const nextStopId = edge.to;
+      const nextLineId = edge.lineId || '__';
+      const nextKey = `${nextStopId}|${nextLineId}`;
+
+      if (visited.has(nextKey)) continue;
+
+      const edgeScore = scoreEdge(edge, filter, current.lineId);
+      const newScore = current.score + edgeScore;
+
+      if (!distances.has(nextKey) || newScore < distances.get(nextKey)) {
+        distances.set(nextKey, newScore);
+        previous.set(nextKey, { prevKey: current.key, edge });
         queue.push({
           key: nextKey,
-          score: tentative,
-          stopId: edge.to,
-          lineId: nextLine,
+          score: newScore,
+          stopId: nextStopId,
+          lineId: edge.lineId,
         });
       }
-    });
+    }
   }
 
-  return null;
+  return [];
 }
 
-function buildSegments(pathEdges) {
-  if (!pathEdges || pathEdges.length === 0) return [];
+function groupIntoSegments(path) {
+  if (!path.length) return [];
 
   const segments = [];
-  pathEdges.forEach((edge) => {
-    const last = segments[segments.length - 1];
-    const normalizedLine = edge.mode === 'walk' ? 'walk' : edge.lineId;
-    if (
-      last &&
-      last.lineId === normalizedLine
-    ) {
-      last.duration += edge.duration;
-      // Don't accumulate cost - fare is fixed per line, not per segment
-      last.distance += edge.distance;
-      last.to = edge.to;
-      last.stops.push(edge.to);
-    } else {
-      const line = lineMap.get(edge.lineId);
-      // Fixed fare per line: 7000-8000 VND for entire trip on that line
-      const fixedFare = edge.mode === 'walk' ? 0 : (line?.fare || 7000);
+  let currentSegment = {
+    from: path[0].from,
+    to: path[0].to,
+    lineId: path[0].lineId,
+    lineName: path[0].lineName,
+    mode: path[0].mode,
+    duration: path[0].duration,
+    cost: path[0].cost,
+    distance: path[0].distance,
+  };
 
-      segments.push({
-        mode: edge.mode,
-        lineId: normalizedLine,
-        lineName: line ? line.name : edge.mode === 'walk' ? 'Đi bộ' : 'Liên tuyến',
-        color: line ? line.color : '#666666',
+  for (let i = 1; i < path.length; i++) {
+    const edge = path[i];
+
+    if (edge.lineId === currentSegment.lineId && edge.mode === currentSegment.mode) {
+      currentSegment.to = edge.to;
+      currentSegment.duration += edge.duration;
+      currentSegment.distance += edge.distance;
+    } else {
+      segments.push(currentSegment);
+      currentSegment = {
         from: edge.from,
         to: edge.to,
-        stops: [edge.from, edge.to],
+        lineId: edge.lineId,
+        lineName: edge.lineName,
+        mode: edge.mode,
         duration: edge.duration,
-        cost: fixedFare, // Fixed fare per line, not per segment
+        cost: edge.cost,
         distance: edge.distance,
-      });
+      };
     }
-  });
+  }
 
+  segments.push(currentSegment);
   return segments;
 }
 
-function summarizeSegments(segments) {
-  return segments.reduce(
-    (acc, seg, idx) => {
-      acc.totalDuration += seg.duration;
-      acc.totalCost += seg.cost;
-      acc.totalDistance += seg.distance;
-      if (
-        idx > 0 &&
-        seg.lineId !== 'walk' &&
-        seg.lineId !== segments[idx - 1].lineId
-      ) {
-        acc.transfers += 1;
-      }
-      return acc;
-    },
-    { totalDuration: 0, totalCost: 0, totalDistance: 0, transfers: 0 }
-  );
-}
-
-function pathToCoordinates(segments) {
-  const coords = [];
-  segments.forEach((segment, idx) => {
-    segment.stops.forEach((stopId, stopIdx) => {
-      const stop = stopMap.get(stopId);
-      if (!stop) return;
-      if (
-        idx > 0 &&
-        stopIdx === 0 &&
-        coords.length > 0 &&
-        coords[coords.length - 1].stopId === stopId
-      ) {
-        return;
-      }
-      coords.push({
-        stopId,
-        name: stop.name,
-        coords: stop.coords,
-        type: stop.type,
-      });
-    });
+function extractCoordinates(segments) {
+  const coordinates = [];
+  segments.forEach((seg) => {
+    const fromStop = stopMap.get(seg.from);
+    const toStop = stopMap.get(seg.to);
+    if (fromStop) coordinates.push(fromStop.coords);
+    if (toStop) coordinates.push(toStop.coords);
   });
-  return coords;
+  return coordinates;
 }
 
-function planRoute(startId, endId, filter) {
-  const pathEdges = dijkstra(startId, endId, filter);
-  if (!pathEdges) return null;
+async function planRouteWithGeometry(fromId, toId, filter = 'fastest') {
+  await initializeGraph(); // Ensure graph is loaded
 
-  const segments = buildSegments(pathEdges);
-  const summary = summarizeSegments(segments);
-  const coordinates = pathToCoordinates(segments);
+  const path = await dijkstra(fromId, toId, filter);
+  if (!path.length) return null;
+
+  const segments = groupIntoSegments(path);
+
+  let totalDuration = 0;
+  let totalCost = 0;
+  let totalDistance = 0;
+  const linesUsed = new Set();
+
+  segments.forEach((seg) => {
+    totalDuration += seg.duration;
+    totalDistance += seg.distance;
+    if (seg.mode !== 'walk' && seg.lineId) {
+      linesUsed.add(seg.lineId);
+    }
+  });
+
+  totalCost = linesUsed.size * 7000;
+
+  const coordinates = extractCoordinates(segments);
 
   return {
     segments,
-    summary,
     coordinates,
-    stops: coordinates.map((coord) => coord.stopId),
+    geometries: [], // Can be populated with detailed route geometries if needed
+    summary: {
+      totalDuration,
+      totalCost,
+      totalDistance,
+      transferCount: Math.max(0, linesUsed.size - 1),
+    },
   };
-}
-
-async function planRouteWithGeometry(startId, endId, filter) {
-  const pathEdges = dijkstra(startId, endId, filter);
-  if (!pathEdges) return null;
-
-  const segments = buildSegments(pathEdges);
-  const summary = summarizeSegments(segments);
-  const coordinates = pathToCoordinates(segments);
-
-  // Get route geometries for each segment
-  const { getSegmentGeometries } = require('../services/routingService');
-  const geometries = await getSegmentGeometries(segments, stopMap);
-
-  return {
-    segments,
-    summary,
-    coordinates,
-    geometries, // Array of geometry arrays for each segment
-    stops: coordinates.map((coord) => coord.stopId),
-  };
-}
-
-function getLineById(lineId) {
-  return lineMap.get(lineId);
 }
 
 function getStopById(stopId) {
+  if (!stopMap) return null;
   return stopMap.get(stopId);
 }
 
-function searchStopsAndLines(query) {
-  const term = query.trim().toLowerCase();
-  const stopMatches = stops
-    .filter((stop) => stop.name.toLowerCase().includes(term))
-    .map((stop) => ({
-      type: 'stop',
-      id: stop.id,
-      name: stop.name,
-      coords: stop.coords,
-    }));
-
-  const lineMatches = lines
-    .filter(
-      (line) =>
-        line.name.toLowerCase().includes(term) ||
-        line.id.toLowerCase().includes(term)
-    )
-    .map((line) => ({
-      type: 'line',
-      id: line.id,
-      name: line.name,
-      lineType: line.type,
-      color: line.color,
-    }));
-
-  return [...lineMatches, ...stopMatches];
-}
-
 module.exports = {
-  planRoute,
+  initializeGraph,
   planRouteWithGeometry,
-  getLineById,
+  stops: async () => {
+    await initializeGraph();
+    return stops;
+  },
   getStopById,
-  searchStopsAndLines,
-  stops,
-  lines,
 };
 

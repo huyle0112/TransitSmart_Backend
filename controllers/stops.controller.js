@@ -63,5 +63,22 @@ module.exports = {
             console.error("Error fetching stop times:", err.message);
             res.status(500).json({ error: "Failed to fetch stop times" });
         }
+    },
+
+    // GET /stops/:id/arrivals
+    async getStopArrivals(req, res) {
+        const { id } = req.params;
+
+        try {
+            const routes = await stopsService.getRoutesWithArrivals(id);
+            res.json({
+                stopId: id,
+                routes,
+                timestamp: new Date().toISOString()
+            });
+        } catch (err) {
+            console.error("Error fetching stop arrivals:", err.message);
+            res.status(500).json({ error: "Failed to fetch stop arrivals" });
+        }
     }
 };
