@@ -86,5 +86,17 @@ module.exports = {
       const t2 = new Date(b.start_time).getTime();
       return t1 - t2;
     });
+  },
+
+  async createRoute(data) {
+    return routesRepo.create(data);
+  },
+
+  async updateRoute(id, data) {
+    return routesRepo.update(id, data);
+  },
+
+  async deleteRoute(id) {
+    return routesRepo.delete(id);
   }
 };

@@ -48,5 +48,43 @@ module.exports = {
       console.error('Schedule error:', err);
       res.status(500).json({ message: 'Lỗi server khi xem lịch trình.' });
     }
+  },
+
+  async createBusRoute(req, res) {
+    try {
+      const data = req.body;
+      // Basic validation
+      if (!data.id || !data.long_name) {
+        return res.status(400).json({ message: 'Thiếu thông tin bắt buộc (id, long_name).' });
+      }
+      const newRoute = await busRoutesService.createRoute(data);
+      res.status(201).json(newRoute);
+    } catch (err) {
+      console.error('Create error:', err);
+      res.status(500).json({ message: 'Lỗi server khi tạo tuyến buýt.', error: err.message });
+    }
+  },
+
+  async updateBusRoute(req, res) {
+    try {
+      const { id } = req.params;
+      const data = req.body;
+      const updatedRoute = await busRoutesService.updateRoute(id, data);
+      res.json(updatedRoute);
+    } catch (err) {
+      console.error('Update error:', err);
+      res.status(500).json({ message: 'Lỗi server khi cập nhật tuyến buýt.', error: err.message });
+    }
+  },
+
+  async deleteBusRoute(req, res) {
+    try {
+      const { id } = req.params;
+      await busRoutesService.deleteRoute(id);
+      res.json({ message: 'Xoá tuyến buýt thành công.' });
+    } catch (err) {
+      console.error('Delete error:', err);
+      res.status(500).json({ message: 'Lỗi server khi xoá tuyến buýt.', error: err.message });
+    }
   }
 };
