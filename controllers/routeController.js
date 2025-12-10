@@ -322,29 +322,9 @@ exports.getNearbyStops = async (req, res) => {
       }
     });
 
-    // Get OSRM walking routes for each stop and get bus routes passing through
+    // Get bus routes for each stop (NO OSRM routes - fetch on demand when user clicks)
     const stopsWithRoutes = await Promise.all(
       nearby.map(async (stop, index) => {
-        let walkingRoute = null;
-        let walkingDistance = stop.distanceKm * 1000;
-        let walkingDuration = stop.walkingDuration;
-
-        // Get OSRM route
-        try {
-          const osrmUrl = `http://router.project-osrm.org/route/v1/foot/${coords.lng},${coords.lat};${stop.coords.lng},${stop.coords.lat}?overview=full&geometries=geojson`;
-          const response = await fetch(osrmUrl);
-          const data = await response.json();
-
-          if (data.code === 'Ok' && data.routes && data.routes[0]) {
-            const route = data.routes[0];
-            walkingRoute = route.geometry;
-            walkingDistance = route.distance;
-            walkingDuration = Math.round(route.duration / 60);
-          }
-        } catch (error) {
-          console.error(`Failed to get OSRM route for stop ${stop.id}:`, error);
-        }
-
         // Get bus routes passing through this stop with real-time arrivals from stop_times
         const stopsService = require('../services/stops.service');
         let busRoutes = [];
@@ -364,17 +344,14 @@ exports.getNearbyStops = async (req, res) => {
           console.log(`[DEBUG] Found ${busRoutes.length} routes with arrivals for stop ${stop.id} (${stop.name})`);
         } catch (error) {
           console.error(`[ERROR] Failed to get routes for stop ${stop.id}:`, error);
-          // Fallback to empty array if error occurs
           busRoutes = [];
         }
 
         return {
           ...stop,
-          walkingRoute,
-          walkingDistance,
-          walkingDuration,
+          // NO walkingRoute here - will be fetched on-demand when user selects the stop
           busRoutes,
-          orderNumber: index + 1, // Add order number for display
+          orderNumber: index + 1,
         };
       })
     );
@@ -389,3 +366,54 @@ exports.getNearbyStops = async (req, res) => {
   }
 };
 
+/**
+ * Get walking route from origin to a specific stop using OSRM
+ * Called when user clicks on a stop to see the walking path
+ */
+exports.getWalkingRoute = async (req, res) => {
+  const { stopId } = req.params;
+  const { originLat, originLng } = req.query;
+
+  if (!stopId || !originLat || !originLng) {
+    return res.status(400).json({
+      message: 'Missing required parameters: stopId, originLat, originLng'
+    });
+  }
+
+  try {
+    // Get stop coordinates from database
+    const { loadStops } = require('../utils/gtfsLoader');
+    const allStops = await loadStops();
+    const stop = allStops.find(s => s.id === stopId);
+
+    if (!stop) {
+      return res.status(404).json({ message: 'Stop not found' });
+    }
+
+    // Fetch OSRM walking route
+    const osrmUrl = `http://router.project-osrm.org/route/v1/foot/${originLng},${originLat};${stop.coords.lng},${stop.coords.lat}?overview=full&geometries=geojson`;
+    const response = await fetch(osrmUrl);
+    const data = await response.json();
+
+    if (data.code === 'Ok' && data.routes && data.routes[0]) {
+      const route = data.routes[0];
+      return res.json({
+        stopId,
+        walkingRoute: route.geometry,
+        walkingDistance: route.distance,
+        walkingDuration: Math.round(route.duration / 60),
+      });
+    } else {
+      return res.status(500).json({
+        message: 'Failed to get walking route from OSRM',
+        osrmResponse: data
+      });
+    }
+  } catch (error) {
+    console.error('Error in getWalkingRoute:', error);
+    return res.status(500).json({
+      message: 'Error fetching walking route',
+      error: error.message
+    });
+  }
+};
