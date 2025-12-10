@@ -2,11 +2,12 @@
 **Hướng dẫn tạo database**
 
 CƠ SƠ DỮ LIỆU SỬ DỤNG: POSTGRESQL
+tạo file .env, thêm DATABASE_URL vào
 
 chạy lệnh:
 
 ```bash
-npm run dev
+npm install
 npx prisma generate
 ```
 
