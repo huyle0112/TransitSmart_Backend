@@ -1,0 +1,49 @@
+const prisma = require('../config/prisma');
+
+exports.listUsers = async (req, res) => {
+  try {
+    const users = await prisma.users.findMany({
+      orderBy: { created_at: 'desc' },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        created_at: true,
+        reviews: { select: { id: true } },
+        saved_routes: { select: { id: true, mode: true } },
+      },
+      take: 200,
+    });
+
+    const mapped = users.map((u) => ({
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      created_at: u.created_at,
+      reviewsCount: u.reviews.length,
+      favoritesCount: u.saved_routes.filter((s) => s.mode === 'favorite').length,
+      historyCount: u.saved_routes.filter((s) => s.mode === 'history').length,
+    }));
+
+    res.json({ users: mapped });
+  } catch (err) {
+    res.status(500).json({ message: 'Không thể tải danh sách người dùng.' });
+  }
+};
+
+exports.deleteUser = async (req, res) => {
+  const { id } = req.params;
+  if (!id) {
+    return res.status(400).json({ message: 'Thiếu id người dùng.' });
+  }
+
+  try {
+    await prisma.users.delete({ where: { id } });
+    res.status(204).send();
+  } catch (err) {
+    if (err.code === 'P2025') {
+      return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
+    }
+    res.status(500).json({ message: 'Không thể xoá người dùng.' });
+  }
+};

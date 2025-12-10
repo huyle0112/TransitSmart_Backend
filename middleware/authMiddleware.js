@@ -1,6 +1,10 @@
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-mock-key';
+const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
+  .split(',')
+  .map((email) => email.trim().toLowerCase())
+  .filter(Boolean);
 
 module.exports = function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
@@ -12,10 +16,13 @@ module.exports = function authMiddleware(req, res, next) {
 
   try {
     const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
+    const isAdmin = decoded?.email
+      ? ADMIN_EMAILS.includes(decoded.email.toLowerCase()) || decoded.isAdmin
+      : Boolean(decoded?.isAdmin);
+
+    req.user = { ...decoded, isAdmin };
     next();
   } catch (err) {
     res.status(401).json({ message: 'Phiên đăng nhập hết hạn hoặc không hợp lệ.' });
   }
 };
-
