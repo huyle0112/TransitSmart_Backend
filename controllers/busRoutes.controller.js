@@ -1,0 +1,90 @@
+const busRoutesService = require('../services/busRoutes.service');
+
+module.exports = {
+  async searchBusRoutes(req, res) {
+    try {
+      const { q } = req.query;
+      if (!q) {
+        return res.status(400).json({ message: 'Vui lòng cung cấp từ khoá tìm kiếm (q).' });
+      }
+
+      const results = await busRoutesService.search(q);
+      res.json(results);
+    } catch (err) {
+      console.error('Search error:', err);
+      res.status(500).json({ message: 'Lỗi server khi tìm kiếm tuyến buýt.' });
+    }
+  },
+
+  async getBusLineDetails(req, res) {
+    try {
+      const { name } = req.query;
+      if (!name) {
+        return res.status(400).json({ message: 'Vui lòng cung cấp tên tuyến (name).' });
+      }
+
+      const details = await busRoutesService.getLineDetails(name);
+      if (!details) {
+        return res.status(404).json({ message: 'Không tìm thấy thông tin tuyến buýt.' });
+      }
+
+      res.json(details);
+    } catch (err) {
+      console.error('Details error:', err);
+      res.status(500).json({ message: 'Lỗi server khi lấy chi tiết tuyến buýt.' });
+    }
+  },
+
+  async getRouteSchedule(req, res) {
+    try {
+      const { routeId } = req.query;
+      if (!routeId) {
+        return res.status(400).json({ message: 'Vui lòng cung cấp mã lộ trình (routeId).' });
+      }
+
+      const schedule = await busRoutesService.getSchedule(routeId);
+      res.json(schedule);
+    } catch (err) {
+      console.error('Schedule error:', err);
+      res.status(500).json({ message: 'Lỗi server khi xem lịch trình.' });
+    }
+  },
+
+  async createBusRoute(req, res) {
+    try {
+      const data = req.body;
+      // Basic validation
+      if (!data.id || !data.long_name) {
+        return res.status(400).json({ message: 'Thiếu thông tin bắt buộc (id, long_name).' });
+      }
+      const newRoute = await busRoutesService.createRoute(data);
+      res.status(201).json(newRoute);
+    } catch (err) {
+      console.error('Create error:', err);
+      res.status(500).json({ message: 'Lỗi server khi tạo tuyến buýt.', error: err.message });
+    }
+  },
+
+  async updateBusRoute(req, res) {
+    try {
+      const { id } = req.params;
+      const data = req.body;
+      const updatedRoute = await busRoutesService.updateRoute(id, data);
+      res.json(updatedRoute);
+    } catch (err) {
+      console.error('Update error:', err);
+      res.status(500).json({ message: 'Lỗi server khi cập nhật tuyến buýt.', error: err.message });
+    }
+  },
+
+  async deleteBusRoute(req, res) {
+    try {
+      const { id } = req.params;
+      await busRoutesService.deleteRoute(id);
+      res.json({ message: 'Xoá tuyến buýt thành công.' });
+    } catch (err) {
+      console.error('Delete error:', err);
+      res.status(500).json({ message: 'Lỗi server khi xoá tuyến buýt.', error: err.message });
+    }
+  }
+};

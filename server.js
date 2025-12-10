@@ -8,7 +8,8 @@ const searchRoutes = require('./routes/searchRoutes');
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const dbRoutes = require('./routes/dbRoutes');
-const stopRoutes = require('./routes/stops.routes')
+const stopRoutes = require('./routes/stops.routes');
+const busRoutes = require('./routes/busRoutes.routes');
 const { getNearbyStops } = require('./controllers/routeController');
 const { reloadGtfs } = require('./utils/gtfsLoader');
 
@@ -37,6 +38,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/db', dbRoutes);
 app.use('/api/stop', stopRoutes);
+app.use('/api/bus-lines', busRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Endpoint không tồn tại' });
