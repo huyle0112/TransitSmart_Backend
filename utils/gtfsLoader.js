@@ -16,17 +16,25 @@ async function loadStops() {
   try {
     const dbStops = await prisma.stops.findMany();
 
-    cachedStops = dbStops.map(stop => ({
-      id: stop.id,
-      name: stop.name,
-      coords: {
-        lat: parseFloat(stop.lat),
-        lng: parseFloat(stop.lng)
-      },
-      type: stop.type || 'bus'
-    }));
+    // Map stops and deduplicate by ID
+    const stopsMap = new Map();
+    dbStops.forEach(stop => {
+      if (!stopsMap.has(stop.id)) {
+        stopsMap.set(stop.id, {
+          id: stop.id,
+          name: stop.name,
+          coords: {
+            lat: parseFloat(stop.lat),
+            lng: parseFloat(stop.lng)
+          },
+          type: stop.type || 'bus'
+        });
+      }
+    });
 
-    console.log(`✅ Loaded ${cachedStops.length} stops from DATABASE`);
+    cachedStops = Array.from(stopsMap.values());
+
+    console.log(`✅ Loaded ${dbStops.length} stops from DATABASE (${cachedStops.length} unique)`);
     return cachedStops;
   } catch (error) {
     console.error('❌ Error loading stops from database:', error.message);

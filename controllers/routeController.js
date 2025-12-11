@@ -291,7 +291,18 @@ exports.getNearbyStops = async (req, res) => {
     const { loadStops, loadRoutes } = require('../utils/gtfsLoader');
     const allStops = await loadStops();
 
-    const nearby = allStops
+    // Remove duplicate stops by ID first
+    const uniqueStopsMap = new Map();
+    allStops.forEach(stop => {
+      if (!uniqueStopsMap.has(stop.id)) {
+        uniqueStopsMap.set(stop.id, stop);
+      }
+    });
+    const uniqueStops = Array.from(uniqueStopsMap.values());
+
+    console.log(`[DEBUG] Total stops: ${allStops.length}, Unique stops: ${uniqueStops.length}`);
+
+    let nearby = uniqueStops
       .map((stop) => {
         const distanceKm = haversineDistance(coords, stop.coords);
         return {
@@ -305,18 +316,53 @@ exports.getNearbyStops = async (req, res) => {
         };
       })
       .filter((stop) => stop.distanceKm <= MAX_WALKING_DISTANCE_KM) // Only walkable stops
-      .sort((a, b) => a.distanceKm - b.distanceKm)
-      .slice(0, 8);
+      .sort((a, b) => a.distanceKm - b.distanceKm);
 
-    // Add sequential numbers for duplicate stop names
+    // CRITICAL: Remove duplicate stops by proximity (stops within 20m of each other)
+    const MIN_DISTANCE_BETWEEN_STOPS_KM = 0.020; // 20 meters
+    const deduplicatedByProximity = [];
+
+    for (const stop of nearby) {
+      // Check if this stop is too close to any already selected stop
+      const isTooClose = deduplicatedByProximity.some(existingStop => {
+        const distanceBetween = haversineDistance(stop.coords, existingStop.coords);
+        return distanceBetween < MIN_DISTANCE_BETWEEN_STOPS_KM;
+      });
+
+      if (!isTooClose) {
+        deduplicatedByProximity.push(stop);
+      } else {
+        console.log(`[DEBUG] Skipping duplicate stop by proximity: ${stop.name} (${stop.id}) - too close to existing stop`);
+      }
+    }
+
+    // Limit to 8 stops after deduplication
+    nearby = deduplicatedByProximity.slice(0, 8);
+
+    console.log(`[DEBUG] After proximity deduplication: ${deduplicatedByProximity.length} stops (showing ${nearby.length})`);
+
+    // Add sequential numbers for duplicate stop names (FIXED LOGIC)
     const nameCount = new Map();
+
+    // First pass: count occurrences of each name
     nearby.forEach((stop) => {
       const count = nameCount.get(stop.name) || 0;
       nameCount.set(stop.name, count + 1);
-      if (count > 0) {
-        stop.displayName = `${stop.name} (${count + 1})`;
-        stop.sequenceNumber = count + 1;
+    });
+
+    // Second pass: assign display names and sequence numbers
+    const nameSequence = new Map();
+    nearby.forEach((stop) => {
+      const totalCount = nameCount.get(stop.name);
+
+      if (totalCount > 1) {
+        // Multiple stops with same name
+        const currentSeq = (nameSequence.get(stop.name) || 0) + 1;
+        nameSequence.set(stop.name, currentSeq);
+        stop.displayName = `${stop.name} (${currentSeq})`;
+        stop.sequenceNumber = currentSeq;
       } else {
+        // Unique stop name
         stop.displayName = stop.name;
         stop.sequenceNumber = 1;
       }
@@ -337,6 +383,7 @@ exports.getNearbyStops = async (req, res) => {
             id: route.id,
             name: route.name,
             color: '#1f8eed',
+            destinationName: route.destinationName,
             nextArrivals: route.nextArrivals.map(arrival => arrival.minutesUntil),
             nextArrivalTimes: route.nextArrivals.map(arrival => arrival.departureTime)
           })).slice(0, 5); // Limit to 5 routes max

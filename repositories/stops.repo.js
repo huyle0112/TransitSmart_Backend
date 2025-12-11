@@ -90,7 +90,16 @@ module.exports = {
                 r.short_name,
                 r.long_name,
                 r.type,
-                r.fare
+                r.fare,
+                r.forward_direction,
+                (
+                    SELECT s.name
+                    FROM stops s
+                    WHERE s.id LIKE CONCAT(r.id, '_S%')
+                    ORDER BY 
+                        CAST(REGEXP_REPLACE(s.id, '^.*_S(\\d+)$', '\\1') AS INTEGER) DESC
+                    LIMIT 1
+                ) as destination_name
             FROM stop_times st
             JOIN trips t ON st.trip_id = t.trip_id
             JOIN routes r ON t.route_id = r.id
@@ -124,6 +133,8 @@ module.exports = {
                     longName: stopTime.long_name,
                     type: stopTime.type,
                     fare: stopTime.fare,
+                    forwardDirection: stopTime.forward_direction,
+                    destinationName: stopTime.destination_name,
                     nextArrivals: []
                 });
             }
