@@ -143,8 +143,8 @@ exports.findRoutes = async (req, res) => {
     });
   }
 
-  const fromStop = findNearestStop(fromCoords);
-  const toStop = findNearestStop(toCoords);
+  const fromStop = await findNearestStop(fromCoords);
+  const toStop = await findNearestStop(toCoords);
 
   if (!fromStop || !toStop) {
     return res.status(404).json({
@@ -269,7 +269,7 @@ exports.getRouteDetails = (req, res) => {
   return res.json(route);
 };
 
-exports.getNearbyStops = (req, res) => {
+exports.getNearbyStops = async (req, res) => {
   const { lat, lng } = req.query;
   if (typeof lat === 'undefined' || typeof lng === 'undefined') {
     return res
@@ -282,21 +282,137 @@ exports.getNearbyStops = (req, res) => {
     return res.status(400).json({ message: 'Toạ độ không hợp lệ.' });
   }
 
-  const nearby = stops
-    .map((stop) => {
-      const distanceKm = haversineDistance(coords, stop.coords);
-      return {
-        ...stop,
-        distanceKm,
-        distanceText:
-          distanceKm < 1
-            ? `${Math.round(distanceKm * 1000)} m`
-            : `${distanceKm.toFixed(2)} km`,
-        walkingDuration: Math.round((distanceKm * 1000) / 80), // 80 m/min walk
-      };
-    })
-    .sort((a, b) => a.distanceKm - b.distanceKm)
-    .slice(0, 10);
+  // Max walking distance: 1.5km (reasonable walking distance ~15-20 minutes)
+  const MAX_WALKING_DISTANCE_KM = 1.5;
 
-  return res.json({ origin: coords, stops: nearby });
+  try {
+    // Load stops from database
+    const { loadStops, loadRoutes } = require('../utils/gtfsLoader');
+    const allStops = await loadStops();
+
+    const nearby = allStops
+      .map((stop) => {
+        const distanceKm = haversineDistance(coords, stop.coords);
+        return {
+          ...stop,
+          distanceKm,
+          distanceText:
+            distanceKm < 1
+              ? `${Math.round(distanceKm * 1000)} m`
+              : `${distanceKm.toFixed(2)} km`,
+          walkingDuration: Math.round((distanceKm * 1000) / 80), // 80 m/min walk
+        };
+      })
+      .filter((stop) => stop.distanceKm <= MAX_WALKING_DISTANCE_KM) // Only walkable stops
+      .sort((a, b) => a.distanceKm - b.distanceKm)
+      .slice(0, 8);
+
+    // Add sequential numbers for duplicate stop names
+    const nameCount = new Map();
+    nearby.forEach((stop) => {
+      const count = nameCount.get(stop.name) || 0;
+      nameCount.set(stop.name, count + 1);
+      if (count > 0) {
+        stop.displayName = `${stop.name} (${count + 1})`;
+        stop.sequenceNumber = count + 1;
+      } else {
+        stop.displayName = stop.name;
+        stop.sequenceNumber = 1;
+      }
+    });
+
+    // Get bus routes for each stop (NO OSRM routes - fetch on demand when user clicks)
+    const stopsWithRoutes = await Promise.all(
+      nearby.map(async (stop, index) => {
+        // Get bus routes passing through this stop with real-time arrivals from stop_times
+        const stopsService = require('../services/stops.service');
+        let busRoutes = [];
+
+        try {
+          // Get routes with actual arrival times from stop_times table
+          const routesWithArrivals = await stopsService.getRoutesWithArrivals(stop.id);
+
+          busRoutes = routesWithArrivals.map(route => ({
+            id: route.id,
+            name: route.name,
+            color: '#1f8eed',
+            nextArrivals: route.nextArrivals.map(arrival => arrival.minutesUntil),
+            nextArrivalTimes: route.nextArrivals.map(arrival => arrival.departureTime)
+          })).slice(0, 5); // Limit to 5 routes max
+
+          console.log(`[DEBUG] Found ${busRoutes.length} routes with arrivals for stop ${stop.id} (${stop.name})`);
+        } catch (error) {
+          console.error(`[ERROR] Failed to get routes for stop ${stop.id}:`, error);
+          busRoutes = [];
+        }
+
+        return {
+          ...stop,
+          // NO walkingRoute here - will be fetched on-demand when user selects the stop
+          busRoutes,
+          orderNumber: index + 1,
+        };
+      })
+    );
+
+    return res.json({ origin: coords, stops: stopsWithRoutes });
+  } catch (error) {
+    console.error('Error in getNearbyStops:', error);
+    return res.status(500).json({
+      message: 'Lỗi khi tìm trạm gần đây',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * Get walking route from origin to a specific stop using OSRM
+ * Called when user clicks on a stop to see the walking path
+ */
+exports.getWalkingRoute = async (req, res) => {
+  const { stopId } = req.params;
+  const { originLat, originLng } = req.query;
+
+  if (!stopId || !originLat || !originLng) {
+    return res.status(400).json({
+      message: 'Missing required parameters: stopId, originLat, originLng'
+    });
+  }
+
+  try {
+    // Get stop coordinates from database
+    const { loadStops } = require('../utils/gtfsLoader');
+    const allStops = await loadStops();
+    const stop = allStops.find(s => s.id === stopId);
+
+    if (!stop) {
+      return res.status(404).json({ message: 'Stop not found' });
+    }
+
+    // Fetch OSRM walking route
+    const osrmUrl = `http://router.project-osrm.org/route/v1/foot/${originLng},${originLat};${stop.coords.lng},${stop.coords.lat}?overview=full&geometries=geojson`;
+    const response = await fetch(osrmUrl);
+    const data = await response.json();
+
+    if (data.code === 'Ok' && data.routes && data.routes[0]) {
+      const route = data.routes[0];
+      return res.json({
+        stopId,
+        walkingRoute: route.geometry,
+        walkingDistance: route.distance,
+        walkingDuration: Math.round(route.duration / 60),
+      });
+    } else {
+      return res.status(500).json({
+        message: 'Failed to get walking route from OSRM',
+        osrmResponse: data
+      });
+    }
+  } catch (error) {
+    console.error('Error in getWalkingRoute:', error);
+    return res.status(500).json({
+      message: 'Error fetching walking route',
+      error: error.message
+    });
+  }
 };

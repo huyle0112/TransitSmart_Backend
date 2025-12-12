@@ -1,51 +1,11 @@
 generator client {
-  provider = "prisma-client-js"
+  provider   = "prisma-client-js"
   engineType = "library"
 }
-
-
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
-}
-
-model stops {
-  id         String       @id @db.VarChar(50)
-  name       String
-  lat        Float
-  lng        Float
-  type       String?      @db.VarChar(10)
-  stop_times stop_times[]
-}
-
-model routes {
-  id                String   @id @db.VarChar(50)
-  short_name        String?
-  long_name         String?
-  type              String?  @db.VarChar(10)
-  fare              Int?
-  forward_direction Boolean?
-  trips             trips[]
-}
-
-model trips {
-  trip_id    String       @id @db.VarChar(50)
-  route_id   String?      @db.VarChar(50)
-  stop_times stop_times[]
-  routes     routes?      @relation(fields: [route_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-}
-
-model stop_times {
-  trip_id        String    @db.VarChar(50)
-  stop_id        String?   @db.VarChar(50)
-  arrival_time   DateTime? @db.Time(6)
-  departure_time DateTime? @db.Time(6)
-  stop_sequence  Int
-  stop           stops?    @relation(fields: [stop_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-  trip           trips     @relation(fields: [trip_id], references: [trip_id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@id([trip_id, stop_sequence])
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
@@ -65,6 +25,17 @@ model reviews {
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model routes {
+  id                String   @id @db.VarChar(50)
+  short_name        String?
+  long_name         String?
+  type              String?  @db.VarChar(10)
+  fare              Int?
+  forward_direction Boolean?
+  trips             trips[]
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model saved_routes {
   id         String    @id @default(uuid()) @db.Uuid
   user_id    String?   @db.Uuid
@@ -81,6 +52,35 @@ model saved_routes {
 
   @@index([user_id], map: "idx_saved_routes_user")
   @@unique([user_id, route_id], map: "uniq_saved_route_user")
+}
+
+model stop_times {
+  trip_id        String    @db.VarChar(50)
+  stop_id        String?   @db.VarChar(50)
+  arrival_time   DateTime? @db.Time(6)
+  departure_time DateTime? @db.Time(6)
+  stop_sequence  Int
+  stops          stops?    @relation(fields: [stop_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  trips          trips     @relation(fields: [trip_id], references: [trip_id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@id([trip_id, stop_sequence])
+}
+
+/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
+model stops {
+  id         String       @id @db.VarChar(50)
+  name       String
+  lat        Float
+  lng        Float
+  type       String?      @db.VarChar(10)
+  stop_times stop_times[]
+}
+
+model trips {
+  trip_id    String       @id @db.VarChar(50)
+  route_id   String?      @db.VarChar(50)
+  stop_times stop_times[]
+  routes     routes?      @relation(fields: [route_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
 }
 
 model users {

@@ -21,11 +21,11 @@ function haversineDistance(a, b) {
   return EARTH_RADIUS_KM * centralAngle;
 }
 
-function findNearestStop(coords) {
+async function findNearestStop(coords) {
   let nearest = null;
   let minDistance = Number.POSITIVE_INFINITY;
 
-  const stops = loadStops();
+  const stops = await loadStops();
   stops.forEach((stop) => {
     const distance = haversineDistance(coords, stop.coords);
     if (distance < minDistance) {

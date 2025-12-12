@@ -14,4 +14,7 @@ router.post("/", stopsController.createStop);
 // GET /stops/:id/times
 router.get("/:id/times", stopsController.getStopWithTimes);
 
+// GET /stops/:id/arrivals - Get upcoming arrivals for a stop
+router.get("/:id/arrivals", stopsController.getStopArrivals);
+
 module.exports = router;
