@@ -1,14 +1,14 @@
 const express = require('express');
 const {
-  findRoutes,
   getRouteDetails,
   getNearbyStops,
   getWalkingRoute,
 } = require('../controllers/routeController');
+const { findPaths } = require('../controllers/path.find.controller');
 
 const router = express.Router();
 
-router.post('/find', findRoutes);
+router.post('/find', findPaths);
 router.get('/details', getRouteDetails);
 router.get('/nearby', getNearbyStops);
 router.get('/walking-route/:stopId', getWalkingRoute);
