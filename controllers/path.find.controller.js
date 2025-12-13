@@ -81,7 +81,14 @@ async function findPaths(req, res) {
                             max_transfers: maxTransfers
                         }
                     }).catch(error => {
-                        console.error(`API call failed for origin ${originStop.id} to destination (${toCoords.lat}, ${toCoords.lng}) with max_transfers=${maxTransfers}:`, error.message);
+                        console.error(
+                            'API call failed for origin %s to destination (%s, %s) with max_transfers=%s: %s',
+                            originStop.id,
+                            toCoords.lat,
+                            toCoords.lng,
+                            maxTransfers,
+                            error.message
+                        );
                         return null;
                     })
                 });
