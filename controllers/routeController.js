@@ -1,8 +1,7 @@
-const { v4: uuidv4 } = require('uuid');
+const { randomUUID } = require('crypto');
 const { planRouteWithGeometry, stops, getStopById } = require('../utils/graph');
 const { findNearestStop, haversineDistance } = require('../utils/geo');
 const { saveRoute, getRoute } = require('../utils/routeStore');
-const { prisma } = require('../config/prisma');
 
 function buildSegmentSteps(segments) {
   return segments.map((segment, index) => {
@@ -56,7 +55,7 @@ function randomStatus(waitTime = 0) {
 }
 
 function buildRoutePayload({ filter, planResult, fromStop, toStop, fromCoords, toCoords }) {
-  const id = uuidv4();
+  const id = randomUUID();
   const segments = planResult.segments;
   const steps = buildSegmentSteps(segments);
 

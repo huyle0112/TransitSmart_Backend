@@ -35,8 +35,8 @@ module.exports = {
 
         // Use raw SQL query because Prisma doesn't handle TIME type comparison well
         // IMPORTANT: Cast TIME to TEXT to get real time strings, not JavaScript Date objects
-        const stopTimes = await prisma.$queryRawUnsafe(
-            `SELECT 
+        const stopTimes = await prisma.$queryRaw`
+            SELECT 
                 st.trip_id,
                 st.stop_id,
                 st.arrival_time::TEXT as arrival_time,
@@ -51,14 +51,11 @@ module.exports = {
             FROM stop_times st
             JOIN trips t ON st.trip_id = t.trip_id
             JOIN routes r ON t.route_id = r.id
-            WHERE st.stop_id = $1
-              AND st.departure_time >= $2::time
+            WHERE st.stop_id = ${stopId}
+              AND st.departure_time >= CAST(${timeString} AS TIME)
             ORDER BY st.departure_time ASC
-            LIMIT $3`,
-            stopId,
-            timeString,
-            limit
-        );
+            LIMIT ${limit};
+        `;
 
         return stopTimes;
     },
@@ -78,8 +75,8 @@ module.exports = {
 
         // Query TẤT CẢ stop_times của các stops có CÙNG TỌA ĐỘ với stopId
         // (Vì có thể có nhiều stop_id khác nhau nhưng cùng vị trí - 2 chiều đối diện)
-        const upcomingTrips = await prisma.$queryRawUnsafe(
-            `SELECT 
+        const upcomingTrips = await prisma.$queryRaw`
+            SELECT 
                 st.trip_id,
                 st.stop_id,
                 st.arrival_time::TEXT as arrival_time,
@@ -98,15 +95,13 @@ module.exports = {
                 SELECT id
                 FROM stops
                 WHERE (lat, lng) = (
-                    SELECT lat, lng FROM stops WHERE id = $1
+                    SELECT lat, lng FROM stops WHERE id = ${stopId}
                 )
             )
-              AND st.departure_time >= $2::time
+              AND st.departure_time >= CAST(${timeString} AS TIME)
             ORDER BY st.departure_time ASC
-            LIMIT 50`,
-            stopId,
-            timeString
-        );
+            LIMIT 50;
+        `;
 
         // Group by route and get the next 3 arrival times for each route
         const routeMap = new Map();

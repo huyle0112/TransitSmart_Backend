@@ -9,6 +9,8 @@ const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
 const dbRoutes = require('./routes/dbRoutes');
 const stopRoutes = require('./routes/stops.routes');
+const adminRoutes = require('./routes/adminRoutes');
+const reviewRoutes = require('./routes/reviewRoutes');
 const busRoutes = require('./routes/busRoutes.routes');
 const { getNearbyStops } = require('./controllers/routeController');
 const { reloadGtfs } = require('./utils/gtfsLoader');
@@ -36,6 +38,8 @@ app.get('/api/nearby', getNearbyStops);
 app.use('/api/search', searchRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/reviews', reviewRoutes);
 app.use('/api/db', dbRoutes);
 app.use('/api/stop', stopRoutes);
 app.use('/api/bus-lines', busRoutes);
@@ -54,4 +58,3 @@ app.listen(PORT, () => {
   /* eslint-disable no-console */
   console.log(`Mock transit API running on port ${PORT}`);
 });
-
