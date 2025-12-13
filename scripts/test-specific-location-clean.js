@@ -16,12 +16,11 @@ async function testBusesAtSpecificLocation() {
         // Step 1: Lấy tọa độ của stop_id cần test
         console.log(`📍 Lấy tọa độ của bến ${targetStopId}...\n`);
 
-        const targetStop = await prisma.$queryRawUnsafe(
-            `SELECT id, name, lat, lng
-             FROM stops
-             WHERE id = $1`,
-            targetStopId
-        );
+        const targetStop = await prisma.$queryRaw`
+            SELECT id, name, lat, lng
+            FROM stops
+            WHERE id = ${targetStopId};
+        `;
 
         if (targetStop.length === 0) {
             console.log(`❌ Không tìm thấy bến với ID: ${targetStopId}\n`);
@@ -38,16 +37,15 @@ async function testBusesAtSpecificLocation() {
         // (Giống như trong query SQL: WHERE (lat, lng) = (SELECT lat, lng FROM stops WHERE id = '09_1_S27'))
         console.log('🔍 Tìm tất cả stop_id có cùng tọa độ với bến này...\n');
 
-        const stopsAtSameLocation = await prisma.$queryRawUnsafe(
-            `SELECT id, name, lat, lng
-             FROM stops
-             WHERE (lat, lng) = (
-                 SELECT lat, lng 
-                 FROM stops 
-                 WHERE id = $1
-             )`,
-            targetStopId
-        );
+        const stopsAtSameLocation = await prisma.$queryRaw`
+            SELECT id, name, lat, lng
+            FROM stops
+            WHERE (lat, lng) = (
+                SELECT lat, lng 
+                FROM stops 
+                WHERE id = ${targetStopId}
+            );
+        `;
 
         console.log(`   Tìm thấy ${stopsAtSameLocation.length} stop(s) tại cùng tọa độ:`);
         stopsAtSameLocation.forEach((stop, idx) => {
@@ -59,8 +57,8 @@ async function testBusesAtSpecificLocation() {
         // Query giống y hệt như ví dụ của bạn
         console.log(`⏰ Tìm xe buýt đi qua các stop tại vị trí này sau ${testTime}...\n`);
 
-        const upcomingBuses = await prisma.$queryRawUnsafe(
-            `SELECT 
+        const upcomingBuses = await prisma.$queryRaw`
+            SELECT 
                 s.name AS stop_name,
                 r.short_name AS route_short_name,
                 r.long_name AS route_long_name,
@@ -81,15 +79,13 @@ async function testBusesAtSpecificLocation() {
                 WHERE (lat, lng) = (
                     SELECT lat, lng 
                     FROM stops 
-                    WHERE id = $1
+                    WHERE id = ${targetStopId}
                 )
             )
-              AND st.departure_time >= $2::time
+              AND st.departure_time >= CAST(${testTime} AS TIME)
             ORDER BY st.departure_time
-            LIMIT 30`,
-            targetStopId,
-            testTime
-        );
+            LIMIT 30;
+        `;
 
         console.log(`🚌 Tìm thấy ${upcomingBuses.length} chuyến xe sau ${testTime}:\n`);
 
@@ -176,4 +172,3 @@ async function testBusesAtSpecificLocation() {
 
 // Run test
 testBusesAtSpecificLocation();
-

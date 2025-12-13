@@ -47,12 +47,12 @@ async function testConnection() {
 
         // Test 3.5: Check stop_times data (CAST TO TEXT to see real times)
         console.log('📅 Checking stop_times data...');
-        const sampleStopTimes = await prisma.$queryRawUnsafe(
-            `SELECT st.stop_id, st.departure_time::TEXT as departure_time, st.trip_id
-             FROM stop_times st
-             ORDER BY st.departure_time
-             LIMIT 5`
-        );
+        const sampleStopTimes = await prisma.$queryRaw`
+            SELECT st.stop_id, st.departure_time::TEXT as departure_time, st.trip_id
+            FROM stop_times st
+            ORDER BY st.departure_time
+            LIMIT 5;
+        `;
         console.log(`   Sample stop_times (first 5 records - REAL TIMES):`);
         sampleStopTimes.forEach((st, index) => {
             console.log(`   ${index + 1}. Stop: ${st.stop_id}, Trip: ${st.trip_id}, Time: ${st.departure_time}`);
@@ -73,8 +73,8 @@ async function testConnection() {
         console.log(`   Current time: ${timeString}`);
 
         // Query for THIS SPECIFIC STOP only
-        let upcomingTrips = await prisma.$queryRawUnsafe(
-            `SELECT 
+        let upcomingTrips = await prisma.$queryRaw`
+            SELECT 
                 st.stop_id,
                 st.departure_time::TEXT as departure_time,
                 st.trip_id,
@@ -84,13 +84,11 @@ async function testConnection() {
             FROM stop_times st
             JOIN trips t ON st.trip_id = t.trip_id
             JOIN routes r ON t.route_id = r.id
-            WHERE st.stop_id = $1
-              AND st.departure_time >= $2::time
+            WHERE st.stop_id = ${testStopId}
+              AND st.departure_time >= CAST(${timeString} AS TIME)
             ORDER BY st.departure_time ASC
-            LIMIT 10`,
-            testStopId,
-            timeString
-        );
+            LIMIT 10;
+        `;
 
         console.log(`   Found ${upcomingTrips.length} upcoming buses at this stop (REAL TIMES):\n`);
 
@@ -105,8 +103,8 @@ async function testConnection() {
             console.log('   💡 Trying with early morning time (06:00:00)...\n');
 
             // Try with 6:00 AM for THIS SPECIFIC STOP
-            upcomingTrips = await prisma.$queryRawUnsafe(
-                `SELECT 
+            upcomingTrips = await prisma.$queryRaw`
+                SELECT 
                     st.stop_id,
                     st.departure_time::TEXT as departure_time,
                     st.trip_id,
@@ -116,13 +114,11 @@ async function testConnection() {
                 FROM stop_times st
                 JOIN trips t ON st.trip_id = t.trip_id
                 JOIN routes r ON t.route_id = r.id
-                WHERE st.stop_id = $1
-                  AND st.departure_time >= $2::time
+                WHERE st.stop_id = ${testStopId}
+                  AND st.departure_time >= CAST(${ '06:00:00' } AS TIME)
                 ORDER BY st.departure_time ASC
-                LIMIT 10`,
-                testStopId,
-                '06:00:00'
-            );
+                LIMIT 10;
+            `;
 
             console.log(`   Found ${upcomingTrips.length} buses starting from 06:00:00 (REAL TIMES):\n`);
             upcomingTrips.forEach((trip, index) => {
@@ -189,4 +185,3 @@ async function testConnection() {
 
 // Run test
 testConnection();
-
