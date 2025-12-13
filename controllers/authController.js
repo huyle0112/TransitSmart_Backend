@@ -3,12 +3,16 @@ const jwt = require('jsonwebtoken');
 const { randomUUID } = require('crypto');
 const prisma = require('../config/prisma');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-mock-key';
+const JWT_SECRET = process.env.JWT_SECRET;
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is not set. Please configure the environment variable.');
+}
 
 function isAdminEmail(email = '') {
   return ADMIN_EMAILS.includes(email.toLowerCase());

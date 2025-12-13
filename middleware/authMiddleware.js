@@ -1,10 +1,14 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-mock-key';
+const JWT_SECRET = process.env.JWT_SECRET;
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map((email) => email.trim().toLowerCase())
   .filter(Boolean);
+
+if (!JWT_SECRET) {
+  throw new Error('JWT_SECRET is not set. Please configure the environment variable.');
+}
 
 module.exports = function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
