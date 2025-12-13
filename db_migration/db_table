@@ -50,6 +50,7 @@ CREATE TABLE stop_times (
 -- ========================================
 -- 7. Users
 -- ========================================
+DROP TABLE IF EXISTS reviews;
 DROP TABLE IF EXISTS saved_routes;
 DROP TABLE IF EXISTS users;
 
@@ -59,7 +60,8 @@ CREATE TABLE users (
     email TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT NOW(),
-    path_url TEXT
+    path_url TEXT,
+    role VARCHAR(10) CHECK (role in ('user', 'admin')) DEFAULT 'user'
 );
 
 -- ========================================
@@ -71,8 +73,6 @@ CREATE TABLE saved_routes (
     title TEXT,
     from_stop VARCHAR(50),
     to_stop VARCHAR(50),
-    mode VARCHAR(50) CHECK (mode in ('fastest', 'cheapest', 'fewest_tranfers')),
-    options VARCHAR(50),
     saved_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -80,7 +80,6 @@ CREATE TABLE saved_routes (
 -- Reviews (Vote + Comment cho Stop và Route)
 -- ========================================
 
-DROP TABLE IF EXISTS reviews;
 
 CREATE TABLE reviews (
     id UUID PRIMARY KEY,                   

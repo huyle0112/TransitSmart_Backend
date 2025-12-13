@@ -8,9 +8,10 @@ exports.listUsers = async (req, res) => {
         id: true,
         name: true,
         email: true,
+        role: true,
         created_at: true,
         reviews: { select: { id: true } },
-        saved_routes: { select: { id: true, mode: true } },
+        saved_routes: { select: { id: true } },
       },
       take: 200,
     });
@@ -19,14 +20,15 @@ exports.listUsers = async (req, res) => {
       id: u.id,
       name: u.name,
       email: u.email,
+      role: u.role,
       created_at: u.created_at,
       reviewsCount: u.reviews.length,
-      favoritesCount: u.saved_routes.filter((s) => s.mode === 'favorite').length,
-      historyCount: u.saved_routes.filter((s) => s.mode === 'history').length,
+      savedRoutesCount: u.saved_routes.length,
     }));
 
     res.json({ users: mapped });
   } catch (err) {
+    console.error('List users error:', err);
     res.status(500).json({ message: 'Không thể tải danh sách người dùng.' });
   }
 };
@@ -45,5 +47,33 @@ exports.deleteUser = async (req, res) => {
       return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
     }
     res.status(500).json({ message: 'Không thể xoá người dùng.' });
+  }
+};
+
+/**
+ * Get admin dashboard statistics
+ * Requires admin authentication
+ */
+exports.getStats = async (req, res) => {
+  try {
+    // Run all count queries in parallel for performance
+    const [totalUsers, totalRoutes, totalStops, totalReviews] = await Promise.all([
+      prisma.users.count(),
+      prisma.routes.count(),
+      prisma.stops.count(),
+      prisma.reviews.count(),
+    ]);
+
+    res.json({
+      totalUsers,
+      totalRoutes,
+      totalStops,
+      totalReviews,
+    });
+  } catch (error) {
+    console.error('Get admin stats error:', error);
+    res.status(500).json({
+      message: 'Không thể tải thống kê. Vui lòng thử lại sau.',
+    });
   }
 };

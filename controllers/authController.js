@@ -24,7 +24,8 @@ function signToken(user) {
       sub: user.id,
       email: user.email,
       name: user.name,
-      isAdmin: isAdminEmail(user.email),
+      role: user.role || 'user',
+      isAdmin: user.role === 'admin' || isAdminEmail(user.email),
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
@@ -37,22 +38,47 @@ function toSafeUser(user) {
     name: user.name,
     email: user.email,
     createdAt: user.created_at,
-    isAdmin: isAdminEmail(user.email),
+    role: user.role || 'user', // Include role from database
+    isAdmin: user.role === 'admin' || isAdminEmail(user.email),
   };
 }
 
 exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
+
+    // Validate required fields
     if (!name || !email || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng nhập đầy đủ họ tên, email và mật khẩu.' });
+      return res.status(400).json({
+        message: 'Vui lòng nhập đầy đủ thông tin.',
+        details: {
+          name: !name ? 'Họ tên không được để trống' : null,
+          email: !email ? 'Email không được để trống' : null,
+          password: !password ? 'Mật khẩu không được để trống' : null,
+        }
+      });
     }
 
+    // Validate email format
+    if (!email.includes('@')) {
+      return res.status(400).json({
+        message: 'Email không hợp lệ. Email phải chứa ký tự @'
+      });
+    }
+
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({
+        message: 'Mật khẩu phải có ít nhất 6 ký tự'
+      });
+    }
+
+    // Check if email already exists
     const existing = await prisma.users.findUnique({ where: { email } });
     if (existing) {
-      return res.status(409).json({ message: 'Email đã được sử dụng.' });
+      return res.status(409).json({
+        message: 'Email đã được sử dụng. Vui lòng đăng nhập hoặc sử dụng email khác.'
+      });
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -71,31 +97,44 @@ exports.register = async (req, res) => {
       user: toSafeUser(user),
     });
   } catch (error) {
-    res.status(500).json({ message: 'Không thể đăng ký lúc này.' });
+    console.error('Register error:', error);
+    res.status(500).json({
+      message: 'Không thể đăng ký lúc này. Vui lòng thử lại sau.'
+    });
   }
 };
 
 exports.login = async (req, res) => {
   try {
     const { email, password } = req.body || {};
+
+    // Validate required fields
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng nhập email và mật khẩu.' });
+      return res.status(400).json({
+        message: 'Vui lòng nhập đầy đủ email và mật khẩu.',
+        details: {
+          email: !email ? 'Email không được để trống' : null,
+          password: !password ? 'Mật khẩu không được để trống' : null,
+        }
+      });
     }
 
+    // Find user by email
     const user = await prisma.users.findUnique({ where: { email } });
     if (!user) {
-      return res
-        .status(401)
-        .json({ message: 'Email hoặc mật khẩu không chính xác.' });
+      // Return generic message for security (prevent user enumeration)
+      return res.status(401).json({
+        message: 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.'
+      });
     }
 
+    // Verify password
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
-      return res
-        .status(401)
-        .json({ message: 'Email hoặc mật khẩu không chính xác.' });
+      // Return same generic message for security
+      return res.status(401).json({
+        message: 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.'
+      });
     }
 
     const token = signToken(user);
@@ -104,7 +143,10 @@ exports.login = async (req, res) => {
       user: toSafeUser(user),
     });
   } catch (error) {
-    res.status(500).json({ message: 'Không thể đăng nhập lúc này.' });
+    console.error('Login error:', error);
+    res.status(500).json({
+      message: 'Không thể đăng nhập lúc này. Vui lòng thử lại sau.'
+    });
   }
 };
 
@@ -121,11 +163,16 @@ exports.me = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
+      return res.status(404).json({
+        message: 'Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.'
+      });
     }
 
     res.json(toSafeUser(user));
   } catch (error) {
-    res.status(500).json({ message: 'Không thể tải thông tin người dùng.' });
+    console.error('Get current user error:', error);
+    res.status(500).json({
+      message: 'Không thể tải thông tin người dùng. Vui lòng thử lại sau.'
+    });
   }
 };

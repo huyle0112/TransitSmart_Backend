@@ -9,22 +9,6 @@ datasource db {
 }
 
 /// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-model reviews {
-  id          String    @id @default(uuid()) @db.Uuid
-  user_id     String?   @db.Uuid
-  target_type String    @db.VarChar(20)
-  target_id   String    @db.VarChar(100)
-  rating      Int?
-  comment     String?
-  created_at  DateTime? @default(now()) @db.Timestamp(6)
-  updated_at  DateTime? @default(now()) @db.Timestamp(6) @updatedAt
-  users       users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([target_type, target_id], map: "idx_reviews_target")
-  @@unique([user_id, target_type, target_id], map: "uniq_review_target_user")
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
 model routes {
   id                String   @id @db.VarChar(50)
   short_name        String?
@@ -33,25 +17,6 @@ model routes {
   fare              Int?
   forward_direction Boolean?
   trips             trips[]
-}
-
-/// This table contains check constraints and requires additional setup for migrations. Visit https://pris.ly/d/check-constraints for more info.
-model saved_routes {
-  id         String    @id @default(uuid()) @db.Uuid
-  user_id    String?   @db.Uuid
-  route_id   String?   @db.VarChar(100)
-  title      String?
-  from_stop  String?   @db.VarChar(50)
-  to_stop    String?   @db.VarChar(50)
-  mode       String?   @db.VarChar(50)
-  options    String?   @db.VarChar(50)
-  route_data Json?
-  saved_at   DateTime? @default(now()) @db.Timestamp(6)
-  updated_at DateTime? @default(now()) @db.Timestamp(6) @updatedAt
-  users      users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
-
-  @@index([user_id], map: "idx_saved_routes_user")
-  @@unique([user_id, route_id], map: "uniq_saved_route_user")
 }
 
 model stop_times {
@@ -84,30 +49,37 @@ model trips {
 }
 
 model users {
-  id             String           @id @default(uuid()) @db.Uuid
-  name           String?
-  email          String           @unique
-  password       String
-  role           String           @default("user")
-  created_at     DateTime?        @default(now()) @db.Timestamp(6)
-  updated_at     DateTime?        @default(now()) @db.Timestamp(6) @updatedAt
-  path_url       String?
-  reviews        reviews[]
-  saved_routes   saved_routes[]
-  search_history search_history[]
+  id           String         @id @default(uuid()) @db.Uuid
+  name         String?
+  email        String         @unique
+  password     String
+  created_at   DateTime?      @default(now()) @db.Timestamp(6)
+  path_url     String?
+  role         String?        @default("user") @db.VarChar(10)
+  reviews      reviews[]
+  saved_routes saved_routes[]
 }
 
-model search_history {
-  id         String    @id @default(uuid()) @db.Uuid
-  user_id    String?   @db.Uuid
-  from_label String?
-  from_lat   Float?
-  from_lng   Float?
-  to_label   String?
-  to_lat     Float?
-  to_lng     Float?
-  created_at DateTime? @default(now()) @db.Timestamp(6)
-  users      users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+model saved_routes {
+  id        String    @id @default(uuid()) @db.Uuid
+  user_id   String?   @db.Uuid
+  title     String?
+  from_stop String?   @db.VarChar(50)
+  to_stop   String?   @db.VarChar(50)
+  saved_at  DateTime? @default(now()) @db.Timestamp(6)
+  users     users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+}
 
-  @@index([user_id], map: "idx_history_user")
+model reviews {
+  id          String    @id @default(uuid()) @db.Uuid
+  user_id     String?   @db.Uuid
+  target_type String    @db.VarChar(20)
+  target_id   String    @db.VarChar(50)
+  rating      Int?
+  comment     String?
+  created_at  DateTime? @default(now()) @db.Timestamp(6)
+  updated_at  DateTime? @default(now()) @db.Timestamp(6)
+  users       users?    @relation(fields: [user_id], references: [id], onDelete: Cascade, onUpdate: NoAction)
+
+  @@index([target_type, target_id], map: "idx_reviews_target")
 }
