@@ -7,13 +7,13 @@ const router = express.Router();
 
 /**
  * Rate limiter for avatar uploads
+ * 5 requests per 15 minutes per authenticated user
  */
 const avatarUploadLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
+    windowMs: 15 * 60 * 1000, // 15 minutes
     max: 5,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => `avatar-${req.user.sub}`,
     handler: (req, res) => res.status(429).json({
         message: 'Quá nhiều yêu cầu upload. Vui lòng thử lại sau 15 phút.',
         retryAfter: req.rateLimit?.resetTime
