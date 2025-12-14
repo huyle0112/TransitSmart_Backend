@@ -41,7 +41,8 @@ async function generateTokens(user) {
       sub: user.id,
       email: user.email,
       name: user.name,
-      isAdmin,
+      role: user.role || 'user',
+      isAdmin: user.role === 'admin' || isAdminEmail(user.email),
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
@@ -71,20 +72,30 @@ function toSafeUser(user) {
     name: user.name,
     email: user.email,
     createdAt: user.created_at,
-    isAdmin,
-    role: user.role || (isAdmin ? 'admin' : 'user'),
+    role: user.role || 'user', // Include role from database
+    isAdmin: user.role === 'admin' || isAdminEmail(user.email),
   };
 }
 
 exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
-
-    // Validate all fields present
     if (!name || !email || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng nhập đầy đủ họ tên, email và mật khẩu.' });
+      return res.status(400).json({
+        message: 'Vui lòng nhập đầy đủ thông tin.',
+        details: {
+          name: !name ? 'Họ tên không được để trống' : null,
+          email: !email ? 'Email không được để trống' : null,
+          password: !password ? 'Mật khẩu không được để trống' : null,
+        }
+      });
+    }
+
+    // Validate email format
+    if (!email.includes('@')) {
+      return res.status(400).json({
+        message: 'Email không hợp lệ. Email phải chứa ký tự @'
+      });
     }
 
     // Validate email format
@@ -92,6 +103,14 @@ exports.register = async (req, res) => {
       return res
         .status(400)
         .json({ message: 'Email không đúng định dạng. Vui lòng nhập email hợp lệ.' });
+    }
+
+    // Check if email already exists
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({
+        message: 'Mật khẩu phải có ít nhất 6 ký tự'
+      });
     }
 
     // Check if email already exists
@@ -132,9 +151,13 @@ exports.login = async (req, res) => {
 
     // Validate fields
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng nhập email và mật khẩu.' });
+      return res.status(400).json({
+        message: 'Vui lòng nhập đầy đủ email và mật khẩu.',
+        details: {
+          email: !email ? 'Email không được để trống' : null,
+          password: !password ? 'Mật khẩu không được để trống' : null,
+        }
+      });
     }
 
     // Validate email format
@@ -153,11 +176,12 @@ exports.login = async (req, res) => {
     }
 
     // Verify password
+    // Verify password
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
       return res
         .status(401)
-        .json({ message: 'Mật khẩu không chính xác. Vui lòng thử lại.' });
+        .json({ message: 'Email hoặc mật khẩu không chính xác.' });
     }
 
     // Generate tokens
@@ -187,12 +211,17 @@ exports.me = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
+      return res.status(404).json({
+        message: 'Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.'
+      });
     }
 
     res.json(toSafeUser(user));
   } catch (error) {
-    res.status(500).json({ message: 'Không thể tải thông tin người dùng.' });
+    console.error('Get current user error:', error);
+    res.status(500).json({
+      message: 'Không thể tải thông tin người dùng. Vui lòng thử lại sau.'
+    });
   }
 };
 

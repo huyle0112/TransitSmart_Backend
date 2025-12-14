@@ -1,8 +1,32 @@
 const prisma = require("../config/prisma");
 
 module.exports = {
-    getAll: () =>
-        prisma.stops.findMany(),
+    getAll: (skip = 0, limit = 100, search = '') => {
+        const where = search ? {
+            OR: [
+                { id: { contains: search, mode: 'insensitive' } },
+                { name: { contains: search, mode: 'insensitive' } }
+            ]
+        } : {};
+
+        return prisma.stops.findMany({
+            where,
+            skip,
+            take: limit,
+            orderBy: { id: 'asc' }
+        });
+    },
+
+    count: (search = '') => {
+        const where = search ? {
+            OR: [
+                { id: { contains: search, mode: 'insensitive' } },
+                { name: { contains: search, mode: 'insensitive' } }
+            ]
+        } : {};
+
+        return prisma.stops.count({ where });
+    },
 
     getById: (id) =>
         prisma.stops.findUnique({
@@ -13,6 +37,36 @@ module.exports = {
         prisma.stops.create({
             data
         }),
+
+    update: async (id, data) => {
+        try {
+            return await prisma.stops.update({
+                where: { id },
+                data
+            });
+        } catch (error) {
+            if (error.code === 'P2025') {
+                // Record not found
+                return null;
+            }
+            throw error;
+        }
+    },
+
+    delete: async (id) => {
+        try {
+            await prisma.stops.delete({
+                where: { id }
+            });
+            return true;
+        } catch (error) {
+            if (error.code === 'P2025') {
+                // Record not found
+                return false;
+            }
+            throw error;
+        }
+    },
 
     getWithTimes: (id) =>
         prisma.stops.findUnique({

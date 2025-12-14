@@ -3,6 +3,25 @@ const axios = require('axios');
 const config = require('../config/env.config');
 const { getStopById } = require('../services/stops.service');
 
+/**
+ * Calculate haversine distance between two coordinates
+ * @param {number} lat1 - Latitude of first point
+ * @param {number} lon1 - Longitude of first point
+ * @param {number} lat2 - Latitude of second point
+ * @param {number} lon2 - Longitude of second point
+ * @returns {number} Distance in kilometers
+ */
+function haversineDistance(lat1, lon1, lat2, lon2) {
+    const R = 6371; // Earth radius in km
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+        Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c; // Distance in km
+}
+
 async function findPaths(req, res) {
     const { from, to, time } = req.body || {};
 
@@ -95,6 +114,38 @@ async function findPaths(req, res) {
             }
         }
 
+        // Also try direct coordinate-to-coordinate routing (without nearest stops)
+        // This can find routes that don't start from the nearest 3 stops
+        for (const maxTransfers of [1, 2]) {
+            apiCalls.push({
+                originStop: null, // Direct from coordinates
+                originCoords: fromCoords,
+                destCoords: toCoords,
+                maxTransfers,
+                promise: axios.get(apiUrl, {
+                    params: {
+                        lat_from: fromCoords.lat,
+                        lon_from: fromCoords.lng,
+                        lat_to: toCoords.lat,
+                        lon_to: toCoords.lng,
+                        time: departureTime,
+                        max_transfers: maxTransfers
+                    }
+                }).catch(error => {
+                    console.error(
+                        'API call failed for direct coords (%s, %s) to (%s, %s) with max_transfers=%s: %s',
+                        fromCoords.lat,
+                        fromCoords.lng,
+                        toCoords.lat,
+                        toCoords.lng,
+                        maxTransfers,
+                        error.message
+                    );
+                    return null;
+                })
+            });
+        }
+
         // Wait for all API calls to complete
         const apiResults = await Promise.all(apiCalls.map(call => call.promise));
 
@@ -104,7 +155,7 @@ async function findPaths(req, res) {
         apiResults.forEach((result, index) => {
             if (!result || !result.data) return;
 
-            const { originStop, destCoords, maxTransfers } = apiCalls[index];
+            const { originStop, originCoords, destCoords, maxTransfers } = apiCalls[index];
             const data = result.data;
 
             if (data.routes && Array.isArray(data.routes) && data.routes.length > 0) {
@@ -124,21 +175,56 @@ async function findPaths(req, res) {
                                     fromStopLon: fromStop?.lng,
                                     toStopName: toStop?.name,
                                     toStopLat: toStop?.lat,
-                                    toStopLon: toStop?.lng
+                                    toStopLon: toStop?.lng,
+                                    // Add coordinates in ORS-compatible format
+                                    from_coordinates: fromStop ? {
+                                        lat: fromStop.lat,
+                                        lng: fromStop.lng
+                                    } : null,
+                                    to_coordinates: toStop ? {
+                                        lat: toStop.lat,
+                                        lng: toStop.lng
+                                    } : null
                                 };
                             })
                         );
 
+                        // For direct coordinate routes, use route data from API or first segment
+                        let actualOriginStop;
+                        if (originStop) {
+                            actualOriginStop = originStop;
+                        } else if (route.origin_stop_id) {
+                            // API returned origin stop info
+                            actualOriginStop = {
+                                id: route.origin_stop_id,
+                                name: route.origin_stop_name || enrichedSegments[0]?.fromStopName,
+                                lat: route.origin_stop_lat || enrichedSegments[0]?.fromStopLat,
+                                lng: route.origin_stop_lon || enrichedSegments[0]?.fromStopLon,
+                                distance: route.distance_from_origin || 0
+                            };
+                        } else if (enrichedSegments.length > 0) {
+                            // Fallback to first segment
+                            actualOriginStop = {
+                                id: enrichedSegments[0].from_stop,
+                                name: enrichedSegments[0].fromStopName,
+                                lat: enrichedSegments[0].fromStopLat,
+                                lng: enrichedSegments[0].fromStopLon,
+                                distance: 0
+                            };
+                        }
+
+                        const routeIdPrefix = originStop ? originStop.id : 'direct';
+
                         return {
-                            route_id: `${originStop.id}_dest_${maxTransfers}_${routeIndex}`,
+                            route_id: `${routeIdPrefix}_dest_${maxTransfers}_${routeIndex}`,
                             max_transfers: maxTransfers,
-                            origin_stop: {
-                                id: originStop.id,
-                                name: originStop.name,
-                                lat: originStop.lat,
-                                lon: originStop.lng,
-                                distance_from_origin: originStop.distance
-                            },
+                            origin_stop: actualOriginStop ? {
+                                id: actualOriginStop.id,
+                                name: actualOriginStop.name,
+                                lat: actualOriginStop.lat,
+                                lon: actualOriginStop.lng || actualOriginStop.lon,
+                                distance_from_origin: actualOriginStop.distance || 0
+                            } : null,
                             destination_coordinates: {
                                 lat: destCoords.lat,
                                 lng: destCoords.lng
@@ -184,6 +270,183 @@ async function findPaths(req, res) {
 
         // Convert map back to array
         const uniqueRoutes = Array.from(uniqueRoutesMap.values());
+
+        // Add walking segment from origin to first bus stop for each route
+        const WALKING_SPEED_M_PER_MIN = 83.33; // 5 km/h = 83.33 m/min
+        const FARE_PER_ROUTE = 7000; // 7000 VND per bus route
+
+        uniqueRoutes.forEach(route => {
+            if (!route.segments || route.segments.length === 0) return;
+
+            const firstSegment = route.segments[0];
+            const firstStopLat = firstSegment.fromStopLat;
+            const firstStopLon = firstSegment.fromStopLon;
+
+            if (firstStopLat && firstStopLon) {
+                // Calculate walking distance from origin to first stop
+                const distanceKm = haversineDistance(
+                    fromCoords.lat,
+                    fromCoords.lng,
+                    firstStopLat,
+                    firstStopLon
+                );
+                const distanceMeters = distanceKm * 1000;
+                const durationSec = Math.ceil((distanceMeters / WALKING_SPEED_M_PER_MIN) * 60);
+
+                // Create walking segment
+                const walkingSegment = {
+                    mode: 'walk',
+                    from_coordinates: {
+                        lat: fromCoords.lat,
+                        lng: fromCoords.lng
+                    },
+                    to_stop: firstSegment.from_stop,
+                    toStopName: firstSegment.fromStopName,
+                    toStopLat: firstStopLat,
+                    toStopLon: firstStopLon,
+                    to_coordinates: {
+                        lat: firstStopLat,
+                        lng: firstStopLon
+                    },
+                    duration_sec: durationSec,
+                    duration_min: Math.ceil(durationSec / 60),
+                    distance_meters: Math.round(distanceMeters),
+                    fare: 0 // No fare for walking
+                };
+
+                // Prepend walking segment to route
+                route.segments.unshift(walkingSegment);
+            }
+
+            // Add walking segment from last bus stop to destination
+            const lastSegment = route.segments[route.segments.length - 1];
+            const lastStopLat = lastSegment.toStopLat;
+            const lastStopLon = lastSegment.toStopLon;
+
+            if (lastStopLat && lastStopLon) {
+                // Calculate walking distance from last stop to destination
+                const distanceKm = haversineDistance(
+                    lastStopLat,
+                    lastStopLon,
+                    toCoords.lat,
+                    toCoords.lng
+                );
+                const distanceMeters = distanceKm * 1000;
+                const durationSec = Math.ceil((distanceMeters / WALKING_SPEED_M_PER_MIN) * 60);
+
+                // Create final walking segment
+                const finalWalkingSegment = {
+                    mode: 'walk',
+                    from_stop: lastSegment.to_stop,
+                    fromStopName: lastSegment.toStopName,
+                    fromStopLat: lastStopLat,
+                    fromStopLon: lastStopLon,
+                    from_coordinates: {
+                        lat: lastStopLat,
+                        lng: lastStopLon
+                    },
+                    to_coordinates: {
+                        lat: toCoords.lat,
+                        lng: toCoords.lng
+                    },
+                    toStopName: 'Điểm đến',
+                    duration_sec: durationSec,
+                    duration_min: Math.ceil(durationSec / 60),
+                    distance_meters: Math.round(distanceMeters),
+                    fare: 0 // No fare for walking
+                };
+
+                // Append final walking segment to route
+                route.segments.push(finalWalkingSegment);
+            }
+
+            // Recalculate all time values from actual segments
+            // This ensures total_time_sec = walking_time_sec + transit_time_sec + waiting_time_sec
+            let totalWalkingTime = 0;
+            let totalTransitTime = 0;
+            let totalWaitingTime = 0;
+
+            route.segments.forEach((seg, index) => {
+                const segDuration = seg.duration_sec || 0;
+                if (seg.mode === 'walk') {
+                    totalWalkingTime += segDuration;
+                } else if (seg.mode === 'bus') {
+                    totalTransitTime += segDuration;
+                }
+
+                // Add waiting time from segment if provided
+                if (seg.waiting_time_sec) {
+                    totalWaitingTime += seg.waiting_time_sec;
+                }
+            });
+
+            // Get waiting time from route details (from routing service)
+            // If not provided in details or segments, use calculated value
+            const waitingTime = route.details?.waiting_time_sec || totalWaitingTime || 0;
+
+            // Update route details with recalculated times
+            if (route.details) {
+                route.details.walking_time_sec = totalWalkingTime;
+                route.details.transit_time_sec = totalTransitTime;
+                route.details.waiting_time_sec = waitingTime;
+                route.details.total_time_sec = totalWalkingTime + totalTransitTime + waitingTime;
+            }
+
+            // Calculate total fare based on number of unique bus routes
+            const busSegments = route.segments.filter(seg => seg.mode === 'bus');
+            const uniqueBusLines = new Set(busSegments.map(seg => seg.lineId));
+            const totalFare = uniqueBusLines.size * FARE_PER_ROUTE;
+
+            // Add fare to each bus segment
+            route.segments.forEach(seg => {
+                if (seg.mode === 'bus') {
+                    seg.fare = FARE_PER_ROUTE;
+                }
+            });
+
+            // Add total fare to route details
+            if (route.details) {
+                route.details.total_fare = totalFare;
+            }
+        });
+
+        // Calculate and assign filter tags
+        // Filter out walking-only routes (routes with no transit segments)
+        const transitRoutes = uniqueRoutes.filter(route => {
+            const hasTransit = route.segments.some(seg => seg.mode !== 'walk');
+            return hasTransit;
+        });
+
+        if (transitRoutes.length > 0) {
+            // Find fastest route
+            const fastestRoute = transitRoutes.reduce((min, route) =>
+                (route.details?.total_time_sec || Infinity) < (min.details?.total_time_sec || Infinity) ? route : min
+            );
+            fastestRoute.filters = fastestRoute.filters || [];
+            if (!fastestRoute.filters.includes('fastest')) {
+                fastestRoute.filters.push('fastest');
+            }
+
+            // Find route with fewest transfers
+            const fewestTransfersRoute = transitRoutes.reduce((min, route) =>
+                (route.details?.transfers_count || Infinity) < (min.details?.transfers_count || Infinity) ? route : min
+            );
+            fewestTransfersRoute.filters = fewestTransfersRoute.filters || [];
+            if (!fewestTransfersRoute.filters.includes('fewest_transfers')) {
+                fewestTransfersRoute.filters.push('fewest_transfers');
+            }
+
+            // Find route with least walking
+            const leastWalkingRoute = transitRoutes.reduce((min, route) => {
+                const walkingTime = route.details?.walking_time_sec || Infinity;
+                const minWalkingTime = min.details?.walking_time_sec || Infinity;
+                return walkingTime < minWalkingTime ? route : min;
+            });
+            leastWalkingRoute.filters = leastWalkingRoute.filters || [];
+            if (!leastWalkingRoute.filters.includes('least_walking')) {
+                leastWalkingRoute.filters.push('least_walking');
+            }
+        }
 
         if (uniqueRoutes.length === 0) {
             return res.status(404).json({

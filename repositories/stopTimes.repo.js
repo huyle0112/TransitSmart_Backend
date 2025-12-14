@@ -4,7 +4,7 @@ module.exports = {
     getByTripId: (tripId) =>
         prisma.stop_times.findMany({
             where: { trip_id: tripId },
-            include: { stop: true }
+            include: { stops: true }
         }),
 
     create: (data) =>
@@ -17,8 +17,8 @@ module.exports = {
             where: { trip_id: tripId },
             orderBy: { stop_sequence: "asc" },
             include: {
-                stop: true,
-                trip: true
+                stops: true,
+                trips: true
             }
         })
 };
