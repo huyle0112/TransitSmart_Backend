@@ -160,10 +160,136 @@ async function revokeAllUserTokens(userId) {
     }
 }
 
+// Helper functions for search history
+const SEARCH_HISTORY_PREFIX = 'search_history:';
+const SEARCH_HISTORY_TTL = 2 * 60 * 60; // 2 hours in seconds
+
+/**
+ * Save search history to Redis
+ * @param {string} userId - User ID
+ * @param {object} searchData - Search data (from, to, timestamp)
+ * @param {number} ttlSeconds - TTL in seconds (default 2 hours)
+ */
+async function saveSearchHistory(userId, searchData, ttlSeconds = SEARCH_HISTORY_TTL) {
+    console.log('📝 saveSearchHistory called for user:', userId);
+
+    const client = getRedisClient();
+    if (!client) {
+        console.log('❌ Redis client not available');
+        return false;
+    }
+
+    try {
+        const historyKey = `${SEARCH_HISTORY_PREFIX}${userId}`;
+        const timestamp = Date.now();
+
+        console.log('Saving to Redis key:', historyKey);
+        console.log('Search data:', JSON.stringify(searchData, null, 2));
+
+        // Store search data with timestamp as score in sorted set
+        await client.zadd(
+            historyKey,
+            timestamp,
+            JSON.stringify({
+                ...searchData,
+                timestamp
+            })
+        );
+
+        // Limit to 5 most recent items - remove oldest if count > 5
+        const count = await client.zcard(historyKey);
+        if (count > 5) {
+            // Keep only the 5 most recent (highest scores/timestamps)
+            // Remove from start (index 0) to (count - 6) to keep last 5
+            await client.zremrangebyrank(historyKey, 0, count - 6);
+            console.log(`🗑️ Trimmed history to 5 items (removed ${count - 5} old items)`);
+        }
+
+        // Set TTL on the sorted set
+        await client.expire(historyKey, ttlSeconds);
+
+        console.log('✅ Successfully saved to Redis with TTL:', ttlSeconds);
+        return true;
+    } catch (error) {
+        console.error('❌ Error saving search history to Redis:', error);
+        return false;
+    }
+}
+
+/**
+ * Get search history for a user
+ * @param {string} userId - User ID
+ * @returns {Promise<Array>} Array of search history items
+ */
+async function getSearchHistory(userId) {
+    const client = getRedisClient();
+    if (!client) return [];
+
+    try {
+        const historyKey = `${SEARCH_HISTORY_PREFIX}${userId}`;
+
+        // Get all items from sorted set, ordered by timestamp (newest first)
+        const items = await client.zrevrange(historyKey, 0, -1);
+
+        if (!items || items.length === 0) return [];
+
+        // Parse JSON strings back to objects
+        return items.map(item => {
+            try {
+                return JSON.parse(item);
+            } catch (e) {
+                console.error('Error parsing search history item:', e);
+                return null;
+            }
+        }).filter(item => item !== null);
+    } catch (error) {
+        console.error('Error getting search history from Redis:', error);
+        return [];
+    }
+}
+
+/**
+ * Delete a specific search history item
+ * @param {string} userId - User ID
+ * @param {number} timestamp - Timestamp of the item to delete
+ * @returns {Promise<boolean>} Success status
+ */
+async function deleteSearchHistoryItem(userId, timestamp) {
+    const client = getRedisClient();
+    if (!client) return false;
+
+    try {
+        const historyKey = `${SEARCH_HISTORY_PREFIX}${userId}`;
+
+        // Find and remove item with matching timestamp
+        const items = await client.zrevrange(historyKey, 0, -1);
+
+        for (const item of items) {
+            try {
+                const parsed = JSON.parse(item);
+                if (parsed.timestamp === parseInt(timestamp)) {
+                    await client.zrem(historyKey, item);
+                    return true;
+                }
+            } catch (e) {
+                console.error('Error parsing item during deletion:', e);
+            }
+        }
+
+        return false;
+    } catch (error) {
+        console.error('Error deleting search history item:', error);
+        return false;
+    }
+}
+
 module.exports = {
     getRedisClient,
     saveRefreshToken,
     getUserIdFromToken,
     deleteRefreshToken,
     revokeAllUserTokens,
+    saveSearchHistory,
+    getSearchHistory,
+    deleteSearchHistoryItem,
 };

@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const prisma = require('../config/prisma');
 const { getRoute } = require('../utils/routeStore');
+const { getSearchHistory, deleteSearchHistoryItem } = require('../config/redis');
 
 function mapFavorite(record) {
   const cachedRoute = record.route_data || getRoute(record.route_id);
@@ -29,15 +30,15 @@ function mapHistory(record) {
     title: `${record.from_label || 'Điểm đi'} → ${record.to_label || 'Điểm đến'}`,
     from: hasFrom
       ? {
-          label: record.from_label,
-          coords: { lat: record.from_lat, lng: record.from_lng },
-        }
+        label: record.from_label,
+        coords: { lat: record.from_lat, lng: record.from_lng },
+      }
       : { label: record.from_label },
     to: hasTo
       ? {
-          label: record.to_label,
-          coords: { lat: record.to_lat, lng: record.to_lng },
-        }
+        label: record.to_label,
+        coords: { lat: record.to_lat, lng: record.to_lng },
+      }
       : { label: record.to_label },
     createdAt: record.created_at,
   };
@@ -170,15 +171,60 @@ exports.removeFavorite = async (req, res) => {
   }
 };
 
+exports.getFavoriteById = async (req, res) => {
+  const userId = req.user.sub;
+  const { id } = req.params;
+
+  if (!id) {
+    return res.status(400).json({ message: 'Thiếu id lộ trình.' });
+  }
+
+  try {
+    const favorite = await prisma.saved_routes.findFirst({
+      where: {
+        id,
+        user_id: userId
+      },
+      select: {
+        id: true,
+        route_id: true,
+        title: true,
+        from_stop: true,
+        to_stop: true,
+        options: true,
+        saved_at: true,
+        route_data: true,
+      },
+    });
+
+    if (!favorite) {
+      return res.status(404).json({ message: 'Không tìm thấy lộ trình đã lưu.' });
+    }
+
+    res.json({ favorite: mapFavorite(favorite) });
+  } catch (error) {
+    console.error('Error fetching favorite:', error);
+    res.status(500).json({ message: 'Không thể tải lộ trình.' });
+  }
+};
+
 exports.listHistory = async (req, res) => {
   try {
-    const items = await prisma.search_history.findMany({
-      where: { user_id: req.user.sub },
-      orderBy: { created_at: 'desc' },
-      take: 50,
-    });
-    res.json({ history: items.map(mapHistory) });
+    // Get search history from Redis (2-hour TTL)
+    const redisHistory = await getSearchHistory(req.user.sub.toString());
+
+    // Transform Redis data to match frontend interface
+    const history = redisHistory.map(item => ({
+      id: item.timestamp.toString(),
+      from: item.from,
+      to: item.to,
+      createdAt: new Date(item.timestamp).toISOString(),
+      timestamp: item.timestamp
+    }));
+
+    res.json({ history });
   } catch (error) {
+    console.error('Error fetching search history:', error);
     res.status(500).json({ message: 'Không thể tải lịch sử tìm kiếm.' });
   }
 };
@@ -229,16 +275,16 @@ exports.removeHistory = async (req, res) => {
   }
 
   try {
-    const history = await prisma.search_history.findFirst({
-      where: { id, user_id: userId },
-    });
-    if (!history) {
+    // Delete from Redis using timestamp as ID
+    const success = await deleteSearchHistoryItem(userId.toString(), id);
+
+    if (!success) {
       return res.status(404).json({ message: 'Không tìm thấy lịch sử.' });
     }
 
-    await prisma.search_history.delete({ where: { id } });
     res.status(204).send();
   } catch (error) {
+    console.error('Error deleting search history:', error);
     res.status(500).json({ message: 'Không thể xoá lịch sử tìm kiếm.' });
   }
 };

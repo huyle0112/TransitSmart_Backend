@@ -73,8 +73,9 @@ function toSafeUser(user) {
     name: user.name,
     email: user.email,
     createdAt: user.created_at,
-    role: user.role || 'user', // Include role from database
-    isAdmin: user.role === 'admin' || isAdminEmail(user.email),
+    role: user.role || 'user',
+    isAdmin: user.role === 'admin',
+    path_url: user.path_url || null,
   };
 }
 
@@ -211,6 +212,8 @@ exports.me = async (req, res) => {
         name: true,
         email: true,
         created_at: true,
+        role: true,
+        path_url: true,
       },
     });
 
