@@ -50,13 +50,8 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-/**
- * Get admin dashboard statistics
- * Requires admin authentication
- */
 exports.getStats = async (req, res) => {
   try {
-    // Run all count queries in parallel for performance
     const [totalUsers, totalRoutes, totalStops, totalReviews] = await Promise.all([
       prisma.users.count(),
       prisma.routes.count(),
@@ -70,10 +65,8 @@ exports.getStats = async (req, res) => {
       totalStops,
       totalReviews,
     });
-  } catch (error) {
-    console.error('Get admin stats error:', error);
-    res.status(500).json({
-      message: 'Không thể tải thống kê. Vui lòng thử lại sau.',
-    });
+  } catch (err) {
+    console.error('Get admin stats error:', err);
+    res.status(500).json({ message: 'Không thể tải thống kê.' });
   }
 };
