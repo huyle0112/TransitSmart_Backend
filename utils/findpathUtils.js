@@ -31,7 +31,9 @@ function calculateDistance(lat1, lon1, lat2, lon2) {
  * @returns {Promise<Array>} Array of nearest stops with distance
  */
 async function findNearestStops(lat, lon, limit = 3) {
-    const allStops = await stopsService.getAllStops();
+    // Get all stops - getAllStops now returns pagination object
+    const result = await stopsService.getAllStops(0, 999999); // Get all stops without pagination limit
+    const allStops = result.stops || []; // Extract stops array
 
     // Calculate distance for each stop
     const stopsWithDistance = allStops.map((stop) => ({
