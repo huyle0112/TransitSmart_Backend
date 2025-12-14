@@ -1,11 +1,16 @@
 const stopsService = require("../services/stops.service");
 
 module.exports = {
-    // GET /stops
+    // GET /stops?page=1&limit=100&search=query
     async getAllStops(req, res) {
         try {
-            const stops = await stopsService.getAllStops();
-            res.json(stops);
+            const page = parseInt(req.query.page) || 1;
+            const limit = parseInt(req.query.limit) || 100;
+            const skip = (page - 1) * limit;
+            const search = req.query.search || '';
+
+            const result = await stopsService.getAllStops(skip, limit, search);
+            res.json(result);
         } catch (err) {
             console.error("Error fetching stops:", err.message);
             res.status(500).json({ error: "Failed to fetch stops" });

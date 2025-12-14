@@ -1,8 +1,32 @@
 const prisma = require("../config/prisma");
 
 module.exports = {
-    getAll: () =>
-        prisma.stops.findMany(),
+    getAll: (skip = 0, limit = 100, search = '') => {
+        const where = search ? {
+            OR: [
+                { id: { contains: search, mode: 'insensitive' } },
+                { name: { contains: search, mode: 'insensitive' } }
+            ]
+        } : {};
+
+        return prisma.stops.findMany({
+            where,
+            skip,
+            take: limit,
+            orderBy: { id: 'asc' }
+        });
+    },
+
+    count: (search = '') => {
+        const where = search ? {
+            OR: [
+                { id: { contains: search, mode: 'insensitive' } },
+                { name: { contains: search, mode: 'insensitive' } }
+            ]
+        } : {};
+
+        return prisma.stops.count({ where });
+    },
 
     getById: (id) =>
         prisma.stops.findUnique({
