@@ -2,6 +2,7 @@ const { findNearestStops } = require('../utils/findpathUtils');
 const axios = require('axios');
 const config = require('../config/env.config');
 const { getStopById } = require('../services/stops.service');
+const { saveSearchHistory } = require('../config/redis');
 
 /**
  * Calculate haversine distance between two coordinates
@@ -474,6 +475,41 @@ async function findPaths(req, res) {
             return timeA - timeB;
         });
 
+        // Log search history for authenticated users
+        console.log('🔍 Checking authentication for history save...');
+        console.log('req.user:', req.user);
+
+        const userId = req.user?.sub || req.user?.id;
+
+        if (userId) {
+            console.log('✅ User authenticated, saving search history for user ID:', userId);
+
+            // Create labels from coordinates or nearest stops
+            const fromLabel = originStops.length > 0
+                ? `Gần ${originStops[0].name}`
+                : `${fromCoords.lat.toFixed(4)}, ${fromCoords.lng.toFixed(4)}`;
+
+            const toLabel = `${toCoords.lat.toFixed(4)}, ${toCoords.lng.toFixed(4)}`;
+
+            // Save to Redis asynchronously (don't wait)
+            saveSearchHistory(userId.toString(), {
+                from: {
+                    label: fromLabel,
+                    coords: fromCoords
+                },
+                to: {
+                    label: toLabel,
+                    coords: toCoords
+                }
+            }).then(() => {
+                console.log('✅ Search history saved successfully to Redis');
+            }).catch(err => {
+                console.error('❌ Failed to save search history:', err);
+            });
+        } else {
+            console.log('ℹ️ User not authenticated, skipping history save');
+        }
+
         // Return response
         return res.json({
             from: {
@@ -516,6 +552,70 @@ async function findPaths(req, res) {
     }
 }
 
+/**
+ * Save search history to Redis
+ * POST /api/path/save-history
+ * Body: {
+ *   fromLabel: string,
+ *   toLabel: string,
+ *   fromCoords: { lat, lng },
+ *   toCoords: { lat, lng }
+ * }
+ */
+async function saveSearchToHistory(req, res) {
+    try {
+        const userId = req.user?.sub || req.user?.id;
+
+        if (!userId) {
+            return res.status(401).json({ message: 'Yêu cầu đăng nhập để lưu lịch sử.' });
+        }
+
+        const { fromLabel, toLabel, fromCoords, toCoords } = req.body;
+
+        if (!fromLabel || !toLabel || !fromCoords || !toCoords) {
+            return res.status(400).json({
+                message: 'Thiếu thông tin: fromLabel, toLabel, fromCoords, toCoords'
+            });
+        }
+
+        console.log('💾 Saving search history for user:', userId);
+        console.log('From:', fromLabel, fromCoords);
+        console.log('To:', toLabel, toCoords);
+
+        const success = await saveSearchHistory(userId.toString(), {
+            from: {
+                label: fromLabel,
+                coords: fromCoords
+            },
+            to: {
+                label: toLabel,
+                coords: toCoords
+            }
+        });
+
+        if (success) {
+            console.log('✅ History saved successfully');
+            return res.status(201).json({
+                message: 'Đã lưu lịch sử tìm kiếm.',
+                success: true
+            });
+        } else {
+            console.log('❌ Failed to save history');
+            return res.status(500).json({
+                message: 'Không thể lưu lịch sử tìm kiếm.',
+                success: false
+            });
+        }
+    } catch (error) {
+        console.error('Error in saveSearchToHistory:', error);
+        return res.status(500).json({
+            error: 'Internal server error',
+            message: error.message
+        });
+    }
+}
+
 module.exports = {
-    findPaths
+    findPaths,
+    saveSearchToHistory
 };

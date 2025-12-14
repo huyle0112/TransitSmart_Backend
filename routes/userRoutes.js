@@ -3,6 +3,7 @@ const authMiddleware = require('../middleware/authMiddleware');
 const {
   getProfile,
   listFavorites,
+  getFavoriteById,
   saveFavorite,
   removeFavorite,
   listHistory,
@@ -17,6 +18,7 @@ router.use(authMiddleware);
 router.get('/profile', getProfile);
 
 router.get('/favorites', listFavorites);
+router.get('/favorites/:id', getFavoriteById);
 router.post('/favorites', saveFavorite);
 router.delete('/favorites/:id', removeFavorite);
 

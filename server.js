@@ -14,6 +14,7 @@ const reviewRoutes = require('./routes/reviewRoutes');
 const busRoutes = require('./routes/busRoutes.routes');
 const pathRoutes = require('./routes/path.routes');
 const orsRoutes = require('./routes/ors.routes');
+const uploadRoutes = require('./routes/uploadRoutes');
 const { getNearbyStops } = require('./controllers/routeController');
 const { reloadGtfs } = require('./utils/gtfsLoader');
 
@@ -51,6 +52,7 @@ app.use('/api/stop', stopRoutes);
 app.use('/api/bus-lines', busRoutes);
 app.use('/api/path', pathRoutes);
 app.use('/api/ors', orsRoutes);
+app.use('/api/upload', uploadRoutes);
 
 // 404 handler
 app.use((req, res) => {
