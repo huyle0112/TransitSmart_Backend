@@ -14,8 +14,9 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 
-// Email validation regex
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// Safe email validation regex - prevents ReDoS attacks
+// Simple pattern that doesn't use nested quantifiers
+const EMAIL_REGEX = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map((email) => email.trim().toLowerCase())
