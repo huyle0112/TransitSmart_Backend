@@ -14,9 +14,17 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 
-// Safe email validation regex - prevents ReDoS attacks
-// Simple pattern that doesn't use nested quantifiers
-const EMAIL_REGEX = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+// Safe email validation - prevents ReDoS attacks completely
+// Uses simple string operations instead of complex regex
+function isValidEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  const parts = email.split('@');
+  if (parts.length !== 2) return false;
+  const [local, domain] = parts;
+  if (!local || !domain) return false;
+  if (!domain.includes('.')) return false;
+  return /^[a-zA-Z0-9._-]+$/.test(local) && /^[a-zA-Z0-9.-]+$/.test(domain);
+}
 const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
   .split(',')
   .map((email) => email.trim().toLowerCase())
@@ -102,7 +110,7 @@ exports.register = async (req, res) => {
     }
 
     // Validate email format
-    if (!EMAIL_REGEX.test(email)) {
+    if (!isValidEmail(email)) {
       return res
         .status(400)
         .json({ message: 'Email không đúng định dạng. Vui lòng nhập email hợp lệ.' });
@@ -164,7 +172,7 @@ exports.login = async (req, res) => {
     }
 
     // Validate email format
-    if (!EMAIL_REGEX.test(email)) {
+    if (!isValidEmail(email)) {
       return res
         .status(400)
         .json({ message: 'Email không đúng định dạng.' });

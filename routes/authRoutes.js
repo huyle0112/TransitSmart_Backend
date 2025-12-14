@@ -5,7 +5,6 @@ const {
     me,
     refreshToken,
     logout,
-    logoutAll
 } = require('../controllers/authController');
 const authMiddleware = require('../middleware/authMiddleware');
 const rateLimiter = require('../middleware/rateLimiter');
@@ -18,7 +17,6 @@ router.post('/register', authLimiter, register);
 router.post('/login', authLimiter, login);
 router.post('/refresh', authLimiter, refreshToken);
 router.post('/logout', authLimiter, logout);
-router.post('/logout-all', authMiddleware, authLimiter, logoutAll);
 router.get('/me', authMiddleware, me);
 
 module.exports = router;
