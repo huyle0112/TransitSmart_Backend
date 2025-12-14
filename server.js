@@ -20,11 +20,14 @@ const { reloadGtfs } = require('./utils/gtfsLoader');
 const app = express();
 const PORT = process.env.PORT || 4000;
 
+// Nếu chạy sau proxy / Docker, cần để trust proxy
+app.set('trust proxy', 1);
 
 app.use(cors());
 app.use(express.json());
 app.use(morgan('dev'));
 
+// Health check
 app.get('/health', (req, res) =>
   res.json({ status: 'ok', timestamp: Date.now() })
 );
@@ -35,6 +38,7 @@ app.post('/api/reload', (req, res) => {
   res.json({ message: 'Cache cleared. Data will be reloaded on next request.' });
 });
 
+// Các route
 app.use('/api/route', routeRoutes);
 app.get('/api/nearby', getNearbyStops);
 app.use('/api/search', searchRoutes);
@@ -48,17 +52,18 @@ app.use('/api/bus-lines', busRoutes);
 app.use('/api/path', pathRoutes);
 app.use('/api/ors', orsRoutes);
 
+// 404 handler
 app.use((req, res) => {
   res.status(404).json({ message: 'Endpoint không tồn tại' });
 });
 
+// Error handler
 app.use((err, req, res, next) => {
-  /* eslint-disable no-console */
   console.error('Server error:', err);
   res.status(500).json({ message: 'Đã xảy ra lỗi nội bộ.' });
 });
 
+// Start server
 app.listen(PORT, () => {
-  /* eslint-disable no-console */
   console.log(`Mock transit API running on port ${PORT}`);
 });
