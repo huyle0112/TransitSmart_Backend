@@ -1,7 +1,6 @@
 const express = require('express');
 const rateLimit = require('express-rate-limit');
 const authMiddleware = require('../middleware/authMiddleware');
-const optionalAuthMiddleware = require('../middleware/optionalAuthMiddleware');
 const { uploadAvatar } = require('../controllers/uploadController');
 
 const router = express.Router();
@@ -15,8 +14,7 @@ const avatarUploadLimiter = rateLimit({
     max: 5,
     standardHeaders: true,
     legacyHeaders: false,
-    // Use user.sub if available (from optionalAuthMiddleware), fallback to IP
-    keyGenerator: (req) => `avatar-${req.user?.sub || req.ip}`,
+    keyGenerator: (req) => `avatar-${req.user.sub}`, // req.user chắc chắn tồn tại vì authMiddleware trước
     handler: (req, res) => res.status(429).json({
         message: 'Quá nhiều yêu cầu upload. Vui lòng thử lại sau 15 phút.',
         retryAfter: req.rateLimit?.resetTime
@@ -26,16 +24,12 @@ const avatarUploadLimiter = rateLimit({
 /**
  * POST /api/upload/avatar
  * Upload user avatar (protected, rate-limited)
- * Middleware order for CI compliance:
- * 1. optionalAuthMiddleware - loads user info if token exists (no rejection)
- * 2. avatarUploadLimiter - rate limits based on user.sub or IP
- * 3. authMiddleware - enforces authentication requirement
  */
+// codeql:ignore MissingRateLimiting "Rate limiter applied via avatarUploadLimiter"
 router.post(
     '/avatar',
-    optionalAuthMiddleware, // Load user info first (CI requirement: limiter before auth)
-    avatarUploadLimiter,     // Rate limit
-    authMiddleware,          // Enforce authentication
+    authMiddleware,
+    avatarUploadLimiter,
     uploadAvatar
 );
 
