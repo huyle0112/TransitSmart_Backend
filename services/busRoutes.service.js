@@ -44,7 +44,7 @@ module.exports = {
         // schema says forward_direction Boolean?
         // csv shows 'TRUE'/'FALSE'. Prisma maps to boolean.
         headsign: route.short_name, // Just a placeholder
-        stops: stopTimes.map(st => st.stop)
+        stops: stopTimes.map(st => st.stops)
       };
     }));
 
