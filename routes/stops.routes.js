@@ -11,6 +11,12 @@ router.get("/:id", stopsController.getStopById);
 // POST /stops
 router.post("/", stopsController.createStop);
 
+// PUT /stops/:id
+router.put("/:id", stopsController.updateStop);
+
+// DELETE /stops/:id
+router.delete("/:id", stopsController.deleteStop);
+
 // GET /stops/:id/times
 router.get("/:id/times", stopsController.getStopWithTimes);
 
