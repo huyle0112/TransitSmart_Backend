@@ -27,8 +27,8 @@ const avatarUploadLimiter = rateLimit({
 // codeql:ignore MissingRateLimiting "Rate limiter applied via avatarUploadLimiter"
 router.post(
     '/avatar',
-    authMiddleware,
     avatarUploadLimiter,
+    authMiddleware,
     uploadAvatar
 );
 
