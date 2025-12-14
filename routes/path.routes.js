@@ -48,8 +48,8 @@ const saveHistoryLimiter = rateLimit({
  */
 router.post(
     '/find',
-    optionalAuthMiddleware,
     findPathsLimiter,
+    optionalAuthMiddleware,
     findPaths
 );
 
@@ -59,8 +59,8 @@ router.post(
  */
 router.post(
     '/save-history',
-    authMiddleware,
     saveHistoryLimiter,
+    authMiddleware,
     saveSearchToHistory
 );
 

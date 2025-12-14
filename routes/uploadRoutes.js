@@ -27,8 +27,8 @@ const avatarUploadLimiter = rateLimit({
  */
 router.post(
     '/avatar',
-    authMiddleware, // auth first
     avatarUploadLimiter,
+    authMiddleware, // auth first
     uploadAvatar
 );
 
