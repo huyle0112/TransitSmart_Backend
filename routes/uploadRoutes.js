@@ -14,7 +14,6 @@ const avatarUploadLimiter = rateLimit({
     max: 5,
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => `avatar-${req.user.sub}`, // req.user chắc chắn tồn tại vì authMiddleware trước
     handler: (req, res) => res.status(429).json({
         message: 'Quá nhiều yêu cầu upload. Vui lòng thử lại sau 15 phút.',
         retryAfter: req.rateLimit?.resetTime
@@ -25,10 +24,11 @@ const avatarUploadLimiter = rateLimit({
  * POST /api/upload/avatar
  * Upload user avatar (protected, rate-limited)
  */
+// codeql:ignore MissingRateLimiting "Rate limiter applied via avatarUploadLimiter"
 router.post(
     '/avatar',
     avatarUploadLimiter,
-    authMiddleware, // auth first
+    authMiddleware,
     uploadAvatar
 );
 

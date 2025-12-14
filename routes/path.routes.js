@@ -46,6 +46,7 @@ const saveHistoryLimiter = rateLimit({
  * POST /api/path/find
  * Optional authentication
  */
+// codeql:ignore MissingRateLimiting "Rate limiter applied via findPathsLimiter"
 router.post(
     '/find',
     findPathsLimiter,
@@ -57,10 +58,11 @@ router.post(
  * POST /api/path/save-history
  * Requires authentication
  */
+// codeql:ignore MissingRateLimiting "Rate limiter applied via saveHistoryLimiter"
 router.post(
     '/save-history',
-    saveHistoryLimiter,
     authMiddleware,
+    saveHistoryLimiter,
     saveSearchToHistory
 );
 
