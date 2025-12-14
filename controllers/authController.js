@@ -14,12 +14,17 @@ const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '15m';
 const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET;
 const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
 
-// Email validation regex
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
-  .split(',')
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean);
+// Safe email validation - prevents ReDoS attacks completely
+// Uses simple string operations instead of complex regex
+function isValidEmail(email) {
+  if (!email || typeof email !== 'string') return false;
+  const parts = email.split('@');
+  if (parts.length !== 2) return false;
+  const [local, domain] = parts;
+  if (!local || !domain) return false;
+  if (!domain.includes('.')) return false;
+  return /^[a-zA-Z0-9._-]+$/.test(local) && /^[a-zA-Z0-9.-]+$/.test(domain);
+}
 
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is not set. Please configure the environment variable.');
@@ -29,19 +34,16 @@ if (!JWT_REFRESH_SECRET) {
   console.warn('⚠️  JWT_REFRESH_SECRET is not set. Using JWT_SECRET for refresh tokens (not recommended).');
 }
 
-function isAdminEmail(email = '') {
-  return ADMIN_EMAILS.includes(email.toLowerCase());
-}
-
 async function generateTokens(user) {
   // Access token - short lived
-  const isAdmin = user.role === 'admin' || isAdminEmail(user.email);
+  const isAdmin = user.role === 'admin';
   const accessToken = jwt.sign(
     {
       sub: user.id,
       email: user.email,
       name: user.name,
-      isAdmin,
+      role: user.role || 'user',
+      isAdmin: user.role === 'admin',
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
@@ -65,14 +67,14 @@ async function generateTokens(user) {
 }
 
 function toSafeUser(user) {
-  const isAdmin = user.role === 'admin' || isAdminEmail(user.email);
+  const isAdmin = user.role === 'admin';
   return {
     id: user.id,
     name: user.name,
     email: user.email,
     createdAt: user.created_at,
-    isAdmin,
-    role: user.role || (isAdmin ? 'admin' : 'user'),
+    role: user.role || 'user', // Include role from database
+    isAdmin: user.role === 'admin' || isAdminEmail(user.email),
   };
 }
 
@@ -80,18 +82,38 @@ exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
 
-    // Validate all fields present
+    // Validate required fields
     if (!name || !email || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng nhập đầy đủ họ tên, email và mật khẩu.' });
+      return res.status(400).json({
+        message: 'Vui lòng nhập đầy đủ thông tin.',
+        details: {
+          name: !name ? 'Họ tên không được để trống' : null,
+          email: !email ? 'Email không được để trống' : null,
+          password: !password ? 'Mật khẩu không được để trống' : null,
+        }
+      });
     }
 
     // Validate email format
-    if (!EMAIL_REGEX.test(email)) {
+    if (!email.includes('@')) {
+      return res.status(400).json({
+        message: 'Email không hợp lệ. Email phải chứa ký tự @'
+      });
+    }
+
+    // Validate email format
+    if (!isValidEmail(email)) {
       return res
         .status(400)
         .json({ message: 'Email không đúng định dạng. Vui lòng nhập email hợp lệ.' });
+    }
+
+    // Check if email already exists
+    // Validate password length
+    if (password.length < 6) {
+      return res.status(400).json({
+        message: 'Mật khẩu phải có ít nhất 6 ký tự'
+      });
     }
 
     // Check if email already exists
@@ -132,13 +154,17 @@ exports.login = async (req, res) => {
 
     // Validate fields
     if (!email || !password) {
-      return res
-        .status(400)
-        .json({ message: 'Vui lòng nhập email và mật khẩu.' });
+      return res.status(400).json({
+        message: 'Vui lòng nhập đầy đủ email và mật khẩu.',
+        details: {
+          email: !email ? 'Email không được để trống' : null,
+          password: !password ? 'Mật khẩu không được để trống' : null,
+        }
+      });
     }
 
     // Validate email format
-    if (!EMAIL_REGEX.test(email)) {
+    if (!isValidEmail(email)) {
       return res
         .status(400)
         .json({ message: 'Email không đúng định dạng.' });
@@ -153,11 +179,13 @@ exports.login = async (req, res) => {
     }
 
     // Verify password
+    // Verify password
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
-      return res
-        .status(401)
-        .json({ message: 'Mật khẩu không chính xác. Vui lòng thử lại.' });
+      // Return same generic message for security
+      return res.status(401).json({
+        message: 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.'
+      });
     }
 
     // Generate tokens
@@ -187,12 +215,17 @@ exports.me = async (req, res) => {
     });
 
     if (!user) {
-      return res.status(404).json({ message: 'Không tìm thấy người dùng.' });
+      return res.status(404).json({
+        message: 'Không tìm thấy thông tin người dùng. Vui lòng đăng nhập lại.'
+      });
     }
 
     res.json(toSafeUser(user));
   } catch (error) {
-    res.status(500).json({ message: 'Không thể tải thông tin người dùng.' });
+    console.error('Get current user error:', error);
+    res.status(500).json({
+      message: 'Không thể tải thông tin người dùng. Vui lòng thử lại sau.'
+    });
   }
 };
 

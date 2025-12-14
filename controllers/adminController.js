@@ -8,6 +8,7 @@ exports.listUsers = async (req, res) => {
         id: true,
         name: true,
         email: true,
+        role: true,
         created_at: true,
         reviews: { select: { id: true } },
         saved_routes: { select: { id: true } },
@@ -19,6 +20,7 @@ exports.listUsers = async (req, res) => {
       id: u.id,
       name: u.name,
       email: u.email,
+      role: u.role,
       created_at: u.created_at,
       reviewsCount: u.reviews.length,
       savedRoutesCount: u.saved_routes.length,
@@ -48,7 +50,7 @@ exports.deleteUser = async (req, res) => {
   }
 };
 
-exports.getAdminStats = async (req, res) => {
+exports.getStats = async (req, res) => {
   try {
     const [totalUsers, totalRoutes, totalStops, totalReviews] = await Promise.all([
       prisma.users.count(),

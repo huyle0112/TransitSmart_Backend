@@ -1,8 +1,17 @@
 const stopsRepo = require("../repositories/stops.repo");
 
 module.exports = {
-    getAllStops() {
-        return stopsRepo.getAll();
+    async getAllStops(skip = 0, limit = 100, search = '') {
+        const [stops, total] = await Promise.all([
+            stopsRepo.getAll(skip, limit, search),
+            stopsRepo.count(search)
+        ]);
+        return {
+            stops,
+            total,
+            page: Math.floor(skip / limit) + 1,
+            totalPages: Math.ceil(total / limit)
+        };
     },
 
     getStopById(id) {
@@ -11,6 +20,14 @@ module.exports = {
 
     createStop(data) {
         return stopsRepo.create(data);
+    },
+
+    updateStop(id, data) {
+        return stopsRepo.update(id, data);
+    },
+
+    deleteStop(id) {
+        return stopsRepo.delete(id);
     },
 
     getStopWithTimes(id) {
