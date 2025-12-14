@@ -59,7 +59,10 @@ exports.uploadAvatar = [
             }
 
             const userId = req.user.sub;
-            const avatarPath = `/assets/avatar/${req.file.filename}`;
+
+            // Sanitize filename to prevent path traversal
+            const sanitizedFilename = path.basename(req.file.filename);
+            const avatarPath = `/assets/avatar/${sanitizedFilename}`;
 
             // Get old avatar path to delete old file
             const user = await prisma.users.findUnique({
@@ -75,8 +78,15 @@ exports.uploadAvatar = [
 
             // Delete old avatar file if exists
             if (user?.path_url && user.path_url.startsWith('/assets/avatar/')) {
-                const oldFilePath = path.join(__dirname, '../../frontend/public', user.path_url);
-                if (fs.existsSync(oldFilePath)) {
+                // Sanitize old path to prevent path traversal
+                const oldFilename = path.basename(user.path_url);
+                const oldFilePath = path.join(__dirname, '../../frontend/public/assets/avatar', oldFilename);
+
+                // Validate path is within expected directory
+                const resolvedPath = path.resolve(oldFilePath);
+                const expectedDir = path.resolve(__dirname, '../../frontend/public/assets/avatar');
+
+                if (resolvedPath.startsWith(expectedDir) && fs.existsSync(oldFilePath)) {
                     try {
                         fs.unlinkSync(oldFilePath);
                     } catch (err) {
@@ -93,8 +103,15 @@ exports.uploadAvatar = [
         } catch (error) {
             // Delete uploaded file if database update fails
             if (req.file) {
-                const filePath = path.join(AVATAR_DIR, req.file.filename);
-                if (fs.existsSync(filePath)) {
+                // Sanitize filename to prevent path traversal
+                const sanitizedFilename = path.basename(req.file.filename);
+                const filePath = path.join(AVATAR_DIR, sanitizedFilename);
+
+                // Validate path is within expected directory
+                const resolvedPath = path.resolve(filePath);
+                const expectedDir = path.resolve(AVATAR_DIR);
+
+                if (resolvedPath.startsWith(expectedDir) && fs.existsSync(filePath)) {
                     fs.unlinkSync(filePath);
                 }
             }
