@@ -14,7 +14,6 @@ const router = express.Router();
  */
 router.post(
     '/find',
-    optionalAuthMiddleware,
     rateLimit({
         windowMs: 60 * 1000, // 1 minute
         max: (req) => (req.user ? 30 : 10),
@@ -27,7 +26,9 @@ router.post(
                 retryAfter: req.rateLimit?.resetTime
             });
         }
+
     }),
+    optionalAuthMiddleware,
     findPaths
 );
 /**
@@ -39,13 +40,13 @@ router.post(
  */
 router.post(
     '/save-history',
-    authMiddleware,
     rateLimit({
         windowMs: 60 * 1000,
         max: 20,
         keyGenerator: (req) => `save-history-${req.user.sub}`,
         handler: (req, res) => res.status(429).json({ message: 'Too many requests.' }),
     }),
+    authMiddleware,
     saveSearchToHistory
 );
 
