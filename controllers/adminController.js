@@ -8,6 +8,7 @@ exports.listUsers = async (req, res) => {
         id: true,
         name: true,
         email: true,
+        role: true,
         created_at: true,
         reviews: { select: { id: true } },
         saved_routes: { select: { id: true } },

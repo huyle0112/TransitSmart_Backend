@@ -80,6 +80,8 @@ function toSafeUser(user) {
 exports.register = async (req, res) => {
   try {
     const { name, email, password } = req.body || {};
+
+    // Validate required fields
     if (!name || !email || !password) {
       return res.status(400).json({
         message: 'Vui lòng nhập đầy đủ thông tin.',
@@ -179,9 +181,10 @@ exports.login = async (req, res) => {
     // Verify password
     const isValid = await bcrypt.compare(password, user.password);
     if (!isValid) {
-      return res
-        .status(401)
-        .json({ message: 'Email hoặc mật khẩu không chính xác.' });
+      // Return same generic message for security
+      return res.status(401).json({
+        message: 'Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.'
+      });
     }
 
     // Generate tokens
