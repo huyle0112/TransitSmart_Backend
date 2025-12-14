@@ -25,10 +25,6 @@ function isValidEmail(email) {
   if (!domain.includes('.')) return false;
   return /^[a-zA-Z0-9._-]+$/.test(local) && /^[a-zA-Z0-9.-]+$/.test(domain);
 }
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '')
-  .split(',')
-  .map((email) => email.trim().toLowerCase())
-  .filter(Boolean);
 
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET is not set. Please configure the environment variable.');
@@ -38,20 +34,16 @@ if (!JWT_REFRESH_SECRET) {
   console.warn('⚠️  JWT_REFRESH_SECRET is not set. Using JWT_SECRET for refresh tokens (not recommended).');
 }
 
-function isAdminEmail(email = '') {
-  return ADMIN_EMAILS.includes(email.toLowerCase());
-}
-
 async function generateTokens(user) {
   // Access token - short lived
-  const isAdmin = user.role === 'admin' || isAdminEmail(user.email);
+  const isAdmin = user.role === 'admin';
   const accessToken = jwt.sign(
     {
       sub: user.id,
       email: user.email,
       name: user.name,
       role: user.role || 'user',
-      isAdmin: user.role === 'admin' || isAdminEmail(user.email),
+      isAdmin: user.role === 'admin',
     },
     JWT_SECRET,
     { expiresIn: JWT_EXPIRES_IN }
@@ -75,7 +67,7 @@ async function generateTokens(user) {
 }
 
 function toSafeUser(user) {
-  const isAdmin = user.role === 'admin' || isAdminEmail(user.email);
+  const isAdmin = user.role === 'admin';
   return {
     id: user.id,
     name: user.name,
