@@ -1,4 +1,5 @@
 const Redis = require('ioredis');
+const { getVietnamISOString } = require('../utils/vietnamTime');
 
 let redisClient;
 
@@ -65,7 +66,7 @@ async function saveRefreshToken(userId, refreshToken, expirySeconds = 7 * 24 * 6
             expirySeconds,
             JSON.stringify({
                 userId,
-                createdAt: new Date().toISOString(),
+                createdAt: getVietnamISOString(),
             })
         );
 

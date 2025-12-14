@@ -74,8 +74,14 @@ async function findPaths(req, res) {
             });
         }
 
-        // Use provided time or default to current time
-        const departureTime = time || new Date().toTimeString().split(' ')[0];
+        // Use provided time or default to current time in Vietnam timezone (GMT+7)
+        const departureTime = time || new Date().toLocaleTimeString('en-GB', {
+            timeZone: 'Asia/Ho_Chi_Minh',
+            hour12: false,
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
 
         // External API configuration from centralized config
         const apiUrl = config.getRoutingApiUrl(config.externalApis.routingService.endpoints.findRoute);

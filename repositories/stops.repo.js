@@ -1,4 +1,5 @@
 const prisma = require("../config/prisma");
+const { getVietnamTime } = require('../utils/vietnamTime');
 
 module.exports = {
     getAll: (skip = 0, limit = 100, search = '') => {
@@ -77,10 +78,10 @@ module.exports = {
     /**
      * Get upcoming trips for a stop based on current time
      * @param {string} stopId - The stop ID
-     * @param {Date} currentTime - Current time (default: now)
+     * @param {Date} currentTime - Current time (default: Vietnam time now)
      * @param {number} limit - Maximum number of upcoming trips (default: 10)
      */
-    getUpcomingTrips: async (stopId, currentTime = new Date(), limit = 10) => {
+    getUpcomingTrips: async (stopId, currentTime = getVietnamTime(), limit = 10) => {
         // Format current time to HH:MM:SS for TIME comparison
         const hours = String(currentTime.getHours()).padStart(2, '0');
         const minutes = String(currentTime.getMinutes()).padStart(2, '0');
@@ -118,9 +119,9 @@ module.exports = {
      * Get all routes passing through a stop with their next arrival times
      * Tìm TẤT CẢ stops có cùng tọa độ với stop_id, sau đó lấy xe buýt đi qua bất kỳ stop nào
      * @param {string} stopId - The stop ID
-     * @param {Date} currentTime - Current time (default: now)
+     * @param {Date} currentTime - Current time (default: Vietnam time now)
      */
-    getRoutesWithArrivals: async (stopId, currentTime = new Date()) => {
+    getRoutesWithArrivals: async (stopId, currentTime = getVietnamTime()) => {
         // Format current time to HH:MM:SS
         const hours = String(currentTime.getHours()).padStart(2, '0');
         const minutes = String(currentTime.getMinutes()).padStart(2, '0');
