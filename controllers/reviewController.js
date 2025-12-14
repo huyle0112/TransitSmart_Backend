@@ -14,10 +14,10 @@ function mapReview(review) {
     updatedAt: review.updated_at,
     user: review.users
       ? {
-          id: review.users.id,
-          name: review.users.name,
-          email: review.users.email,
-        }
+        id: review.users.id,
+        name: review.users.name,
+        email: review.users.email,
+      }
       : null,
   };
 }
@@ -83,29 +83,39 @@ exports.upsertReview = async (req, res) => {
   }
 
   try {
-    const review = await prisma.reviews.upsert({
+    // Check if review exists
+    const existingReview = await prisma.reviews.findFirst({
       where: {
-        user_id_target_type_target_id: {
-          user_id: req.user.sub,
-          target_type: targetType,
-          target_id: targetId,
-        },
-      },
-      update: {
-        rating,
-        comment,
-        updated_at: new Date(),
-      },
-      create: {
-        id: randomUUID(),
         user_id: req.user.sub,
         target_type: targetType,
         target_id: targetId,
-        rating,
-        comment,
       },
-      include: { users: { select: { id: true, name: true, email: true } } },
     });
+
+    let review;
+    if (existingReview) {
+      review = await prisma.reviews.update({
+        where: { id: existingReview.id },
+        data: {
+          rating,
+          comment,
+          updated_at: new Date(),
+        },
+        include: { users: { select: { id: true, name: true, email: true } } },
+      });
+    } else {
+      review = await prisma.reviews.create({
+        data: {
+          id: randomUUID(),
+          user_id: req.user.sub,
+          target_type: targetType,
+          target_id: targetId,
+          rating,
+          comment,
+        },
+        include: { users: { select: { id: true, name: true, email: true } } },
+      });
+    }
 
     const summary = await buildSummary({
       target_type: targetType,
