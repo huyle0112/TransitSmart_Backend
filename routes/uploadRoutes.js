@@ -43,6 +43,7 @@ const avatarUploadLimiter = rateLimit({
  */
 router.post(
     '/avatar',
+    avatarUploadLimiter,
     authMiddleware,
     (req, res, next) => {
         // Validate user is authenticated before rate limiting
@@ -51,7 +52,6 @@ router.post(
         }
         next();
     },
-    avatarUploadLimiter,
     uploadAvatar
 );
 
