@@ -13,6 +13,14 @@ module.exports = {
         return stopsRepo.create(data);
     },
 
+    updateStop(id, data) {
+        return stopsRepo.update(id, data);
+    },
+
+    deleteStop(id) {
+        return stopsRepo.delete(id);
+    },
+
     getStopWithTimes(id) {
         return stopsRepo.getWithTimes(id);
     },

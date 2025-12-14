@@ -14,6 +14,36 @@ module.exports = {
             data
         }),
 
+    update: async (id, data) => {
+        try {
+            return await prisma.stops.update({
+                where: { id },
+                data
+            });
+        } catch (error) {
+            if (error.code === 'P2025') {
+                // Record not found
+                return null;
+            }
+            throw error;
+        }
+    },
+
+    delete: async (id) => {
+        try {
+            await prisma.stops.delete({
+                where: { id }
+            });
+            return true;
+        } catch (error) {
+            if (error.code === 'P2025') {
+                // Record not found
+                return false;
+            }
+            throw error;
+        }
+    },
+
     getWithTimes: (id) =>
         prisma.stops.findUnique({
             where: { id },

@@ -48,6 +48,49 @@ module.exports = {
         }
     },
 
+    // PUT /stops/:id
+    async updateStop(req, res) {
+        const { id } = req.params;
+        const { name, lat, lng, type, address } = req.body;
+
+        try {
+            const updatedStop = await stopsService.updateStop(id, {
+                name,
+                lat,
+                lng,
+                type,
+                address
+            });
+
+            if (!updatedStop) {
+                return res.status(404).json({ error: "Stop not found" });
+            }
+
+            res.json(updatedStop);
+        } catch (err) {
+            console.error("Error updating stop:", err.message);
+            res.status(500).json({ error: "Failed to update stop" });
+        }
+    },
+
+    // DELETE /stops/:id
+    async deleteStop(req, res) {
+        const { id } = req.params;
+
+        try {
+            const deleted = await stopsService.deleteStop(id);
+
+            if (!deleted) {
+                return res.status(404).json({ error: "Stop not found" });
+            }
+
+            res.json({ success: true, message: "Stop deleted successfully" });
+        } catch (err) {
+            console.error("Error deleting stop:", err.message);
+            res.status(500).json({ error: "Failed to delete stop" });
+        }
+    },
+
     // GET /stops/:id/times
     async getStopWithTimes(req, res) {
         const { id } = req.params;

@@ -389,27 +389,75 @@ exports.getWalkingRoute = async (req, res) => {
       return res.status(404).json({ message: 'Stop not found' });
     }
 
-    // Fetch OSRM walking route
-    const osrmUrl = `http://router.project-osrm.org/route/v1/foot/${originLng},${originLat};${stop.coords.lng},${stop.coords.lat}?overview=full&geometries=geojson`;
-    const response = await fetch(osrmUrl);
-    const data = await response.json();
+    // Check for ORS API key
+    const apiKey = process.env.ORS_API_KEY;
+    if (!apiKey) {
+      console.error('ORS_API_KEY not found in environment variables');
+      return res.status(500).json({
+        message: 'ORS API key not configured'
+      });
+    }
 
-    if (data.code === 'Ok' && data.routes && data.routes[0]) {
-      const route = data.routes[0];
+    // Fetch walking route from OpenRouteService API
+    const axios = require('axios');
+    const { decodePolyline } = require('../utils/polyline.util');
+
+    const orsUrl = 'https://api.openrouteservice.org/v2/directions/foot-walking';
+    const response = await axios.post(
+      orsUrl,
+      {
+        coordinates: [
+          [parseFloat(originLng), parseFloat(originLat)],
+          [stop.coords.lng, stop.coords.lat]
+        ],
+        instructions: false,
+        preference: 'recommended'
+      },
+      {
+        headers: {
+          'Authorization': apiKey,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+
+    if (response.data.routes && response.data.routes.length > 0) {
+      const route = response.data.routes[0];
+
+      // Decode the polyline geometry to GeoJSON format
+      const decodedCoordinates = decodePolyline(route.geometry);
+
+      // Convert from [lat, lng] to [lng, lat] for GeoJSON format
+      const geoJsonCoordinates = decodedCoordinates.map(coord => [coord[1], coord[0]]);
+
+      const geoJsonGeometry = {
+        type: 'LineString',
+        coordinates: geoJsonCoordinates
+      };
+
       return res.json({
         stopId,
-        walkingRoute: route.geometry,
-        walkingDistance: route.distance,
-        walkingDuration: Math.round(route.duration / 60),
+        walkingRoute: geoJsonGeometry,
+        walkingDistance: route.summary.distance,
+        walkingDuration: Math.round(route.summary.duration / 60),
       });
     } else {
       return res.status(500).json({
-        message: 'Failed to get walking route from OSRM',
-        osrmResponse: data
+        message: 'Failed to get walking route from ORS API',
+        orsResponse: response.data
       });
     }
   } catch (error) {
     console.error('Error in getWalkingRoute:', error);
+
+    // Provide more detailed error information
+    if (error.response) {
+      return res.status(error.response.status).json({
+        message: 'Error from ORS API',
+        error: error.response.data?.error?.message || error.message
+      });
+    }
+
     return res.status(500).json({
       message: 'Error fetching walking route',
       error: error.message
