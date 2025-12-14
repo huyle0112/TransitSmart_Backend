@@ -1,4 +1,5 @@
 const stopsService = require("../services/stops.service");
+const { getVietnamISOString } = require('../utils/vietnamTime');
 
 module.exports = {
     // GET /stops?page=1&limit=100&search=query
@@ -122,7 +123,7 @@ module.exports = {
             res.json({
                 stopId: id,
                 routes,
-                timestamp: new Date().toISOString()
+                timestamp: getVietnamISOString()
             });
         } catch (err) {
             console.error("Error fetching stop arrivals:", err.message);
