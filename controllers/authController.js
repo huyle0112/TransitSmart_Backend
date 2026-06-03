@@ -31,7 +31,7 @@ if (!JWT_SECRET) {
 }
 
 if (!JWT_REFRESH_SECRET) {
-  console.warn('⚠️  JWT_REFRESH_SECRET is not set. Using JWT_SECRET for refresh tokens (not recommended).');
+  console.warn(' JWT_REFRESH_SECRET is not set. Using JWT_SECRET for refresh tokens (not recommended).');
 }
 
 async function generateTokens(user) {

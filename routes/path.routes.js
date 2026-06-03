@@ -15,7 +15,7 @@ const findPathsLimiter = rateLimit({
     max: (req) => (req.user ? 30 : 10),
     standardHeaders: true,
     legacyHeaders: false,
-    keyGenerator: (req) => req.user?.sub || req.ip,
+    keyGenerator: (req) => req.user?.sub || rateLimit.ipKeyGenerator(req.ip),
     handler: (req, res) => {
         return res.status(429).json({
             message: 'Quá nhiều yêu cầu tìm đường. Vui lòng thử lại sau một phút.',

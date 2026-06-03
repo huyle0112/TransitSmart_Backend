@@ -74,14 +74,8 @@ async function findPaths(req, res) {
             });
         }
 
-        // Use provided time or default to current time in Vietnam timezone (GMT+7)
-        const departureTime = time || new Date().toLocaleTimeString('en-GB', {
-            timeZone: 'Asia/Ho_Chi_Minh',
-            hour12: false,
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit'
-        });
+        // Use departure time forced to 08:00:00 for routing queries
+        const departureTime = '08:00:00';
 
         // External API configuration from centralized config
         const apiUrl = config.getRoutingApiUrl(config.externalApis.routingService.endpoints.findRoute);
@@ -90,30 +84,37 @@ async function findPaths(req, res) {
         // Create all API calls for each origin stop with exact destination coordinates
         const apiCalls = [];
 
+        console.log(`\n🚀 [Route Debug] Starting path finding from (${fromCoords.lat}, ${fromCoords.lng}) to (${toCoords.lat}, ${toCoords.lng}) at departure time: ${departureTime}`);
+        console.log(`📍 [Route Debug] Found ${originStops.length} nearest origin stops to query:`);
+        originStops.forEach((s, idx) => console.log(`   ${idx + 1}. Stop ID: ${s.id} | Name: ${s.name} | Coords: (${s.lat}, ${s.lng}) | Dist: ${Math.round(s.distance)}m`));
+
         for (const originStop of originStops) {
             // Use exact destination coordinates instead of nearest stop
             for (const maxTransfers of maxTransferValues) {
+                const params = {
+                    lat_from: originStop.lat,
+                    lon_from: originStop.lng,
+                    lat_to: toCoords.lat,
+                    lon_to: toCoords.lng,
+                    time: departureTime,
+                    max_transfers: maxTransfers
+                };
+                console.log(`➡️ [API Call] Calling FastAPI for origin stop [${originStop.name} (${originStop.id})]:`);
+                console.log(`   GET ${apiUrl}`);
+                console.log(`   Params:`, JSON.stringify(params));
+
                 apiCalls.push({
                     originStop,
                     destCoords: toCoords,
                     maxTransfers,
                     promise: axios.get(apiUrl, {
-                        params: {
-                            lat_from: originStop.lat,
-                            lon_from: originStop.lng,
-                            lat_to: toCoords.lat,
-                            lon_to: toCoords.lng,
-                            time: departureTime,
-                            max_transfers: maxTransfers
-                        }
+                        params
+                    }).then(response => {
+                        console.log(`✅ [API Success] Stop [${originStop.name}] | max_transfers: ${maxTransfers} | Found: ${response.data.routes?.length || 0} routes`);
+                        return response;
                     }).catch(error => {
                         console.error(
-                            'API call failed for origin %s to destination (%s, %s) with max_transfers=%s: %s',
-                            originStop.id,
-                            toCoords.lat,
-                            toCoords.lng,
-                            maxTransfers,
-                            error.message
+                            `❌ [API Failed] Stop [${originStop.name}] | max_transfers: ${maxTransfers} | Error: ${error.message}`
                         );
                         return null;
                     })
@@ -124,34 +125,38 @@ async function findPaths(req, res) {
         // Also try direct coordinate-to-coordinate routing (without nearest stops)
         // This can find routes that don't start from the nearest 3 stops
         for (const maxTransfers of [1, 2]) {
+            const params = {
+                lat_from: fromCoords.lat,
+                lon_from: fromCoords.lng,
+                lat_to: toCoords.lat,
+                lon_to: toCoords.lng,
+                time: departureTime,
+                max_transfers: maxTransfers
+            };
+            console.log(`➡️ [API Call] Calling FastAPI for direct coordinate routing:`);
+            console.log(`   GET ${apiUrl}`);
+            console.log(`   Params:`, JSON.stringify(params));
+
             apiCalls.push({
                 originStop: null, // Direct from coordinates
                 originCoords: fromCoords,
                 destCoords: toCoords,
                 maxTransfers,
                 promise: axios.get(apiUrl, {
-                    params: {
-                        lat_from: fromCoords.lat,
-                        lon_from: fromCoords.lng,
-                        lat_to: toCoords.lat,
-                        lon_to: toCoords.lng,
-                        time: departureTime,
-                        max_transfers: maxTransfers
-                    }
+                    params
+                }).then(response => {
+                    console.log(`✅ [API Success] Direct Route | max_transfers: ${maxTransfers} | Found: ${response.data.routes?.length || 0} routes`);
+                    return response;
                 }).catch(error => {
                     console.error(
-                        'API call failed for direct coords (%s, %s) to (%s, %s) with max_transfers=%s: %s',
-                        fromCoords.lat,
-                        fromCoords.lng,
-                        toCoords.lat,
-                        toCoords.lng,
-                        maxTransfers,
-                        error.message
+                        `❌ [API Failed] Direct Route | max_transfers: ${maxTransfers} | Error: ${error.message}`
                     );
                     return null;
                 })
             });
         }
+
+        console.log(`⏳ [Route Debug] Waiting for all ${apiCalls.length} API requests to complete...`);
 
         // Wait for all API calls to complete
         const apiResults = await Promise.all(apiCalls.map(call => call.promise));
