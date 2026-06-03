@@ -398,11 +398,16 @@ exports.getWalkingRoute = async (req, res) => {
       });
     }
 
+    console.log(`\n🚶 [Walking Route Debug] Requesting walking route to stop ID: ${stopId} (${stop.name})`);
+    console.log(`📍 [Walking Route Debug] Origin: (${originLat}, ${originLng}) | Stop Coords: (${stop.coords.lat}, ${stop.coords.lng})`);
+
     // Fetch walking route from OpenRouteService API
     const axios = require('axios');
     const { decodePolyline } = require('../utils/polyline.util');
 
     const orsUrl = 'https://api.openrouteservice.org/v2/directions/foot-walking';
+    console.log(`➡️ [Walking Route Call] POST ${orsUrl}`);
+
     const response = await axios.post(
       orsUrl,
       {
@@ -423,6 +428,7 @@ exports.getWalkingRoute = async (req, res) => {
 
     if (response.data.routes && response.data.routes.length > 0) {
       const route = response.data.routes[0];
+      console.log(`✅ [Walking Route Success] Distance: ${route.summary.distance}m | Duration: ${Math.round(route.summary.duration / 60)} mins`);
 
       // Decode the polyline geometry to GeoJSON format
       const decodedCoordinates = decodePolyline(route.geometry);
@@ -442,6 +448,7 @@ exports.getWalkingRoute = async (req, res) => {
         walkingDuration: Math.round(route.summary.duration / 60),
       });
     } else {
+      console.warn(`⚠️ [Walking Route Warning] No routes found in response:`, JSON.stringify(response.data));
       return res.status(500).json({
         message: 'Failed to get walking route from ORS API',
         orsResponse: response.data

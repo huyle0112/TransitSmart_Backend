@@ -40,6 +40,10 @@ const getDirections = async (req, res) => {
             });
         }
 
+        console.log(`\n🚶 [ORS Debug] Requesting directions for profile: ${selectedProfile}`);
+        console.log(`📍 [ORS Debug] Coordinates:`, JSON.stringify(coordinates));
+        console.log(`➡️ [ORS Call] POST ${ORS_API_URL}/${selectedProfile}`);
+
         // Call ORS API
         const response = await axios.post(
             `${ORS_API_URL}/${selectedProfile}`,
@@ -55,6 +59,8 @@ const getDirections = async (req, res) => {
                 }
             }
         );
+
+        console.log(`✅ [ORS Success] Retrieved route directions. Geometry length: ${response.data.routes?.[0]?.geometry?.length || 0}`);
 
         // Decode geometry and add to response
         if (response.data.routes && response.data.routes.length > 0) {
@@ -79,7 +85,7 @@ const getDirections = async (req, res) => {
         });
 
     } catch (error) {
-        console.error('ORS API Error:', error.response?.data || error.message);
+        console.error(`❌ [ORS Failed] Error requesting directions:`, error.response?.data || error.message);
 
         if (error.response) {
             // ORS API returned an error
